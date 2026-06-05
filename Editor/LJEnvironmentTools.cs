@@ -7,6 +7,8 @@ namespace LJ.EditorTools
     {
         private const string WindowTitle = "LJ Environment Tools";
 
+        private Vector2 _scroll;
+
         [MenuItem("Tools/LJ/Environment Tools")]
         public static void ShowWindow()
         {
@@ -15,6 +17,7 @@ namespace LJ.EditorTools
 
         private void OnGUI()
         {
+            _scroll = EditorGUILayout.BeginScrollView(_scroll);
             GUILayout.Space(8);
             GUILayout.Label("Export", EditorStyles.boldLabel);
 
@@ -33,6 +36,11 @@ namespace LJ.EditorTools
                     LJBlenderLauncher.ExportAndOpen();
                 }
             }
+
+            GUILayout.Space(12);
+            LJBlenderFileBrowser.DrawGUI();
+
+            EditorGUILayout.EndScrollView();
         }
     }
 }

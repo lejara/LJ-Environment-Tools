@@ -59,6 +59,40 @@ namespace LJ.EditorTools
             }
         }
 
+        public static void LaunchBlendFile(string blendPath)
+        {
+            if (string.IsNullOrEmpty(blendPath) || !File.Exists(blendPath))
+            {
+                Debug.LogError($"{LogPrefix} Blend file not found: {blendPath}");
+                return;
+            }
+
+            string blenderPath = ResolveBlenderPath();
+            if (string.IsNullOrEmpty(blenderPath))
+            {
+                Debug.LogError($"{LogPrefix} Blender executable not configured. Aborting open.");
+                return;
+            }
+
+            try
+            {
+                ProcessStartInfo psi = new ProcessStartInfo
+                {
+                    FileName = blenderPath,
+                    Arguments = $"\"{blendPath}\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = false,
+                };
+                Process.Start(psi);
+                Debug.Log($"{LogPrefix} Launched Blender with: {blendPath}");
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"{LogPrefix} Failed to launch Blender: {e.Message}");
+                EditorPrefs.DeleteKey(BlenderPathPrefKey);
+            }
+        }
+
         private static string ResolveBlenderPath()
         {
             string found = AutoDetect();
