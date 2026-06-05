@@ -48,7 +48,13 @@ def register():
     bpy.types.Scene.lj_export = bpy.props.PointerProperty(type=preferences.LJEXPORT_PG_scene)
     if preferences._on_load_post not in bpy.app.handlers.load_post:
         bpy.app.handlers.load_post.append(preferences._on_load_post)
-    preferences.seed_existing_scenes()
+
+    # During install/enable Blender runs register() in a restricted context where
+    # bpy.data.scenes is not yet accessible. Defer the seed to the next tick.
+    def _deferred_seed():
+        preferences.seed_existing_scenes()
+        return None
+    bpy.app.timers.register(_deferred_seed, first_interval=0.0)
 
 
 def unregister():

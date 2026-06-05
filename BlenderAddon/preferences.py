@@ -89,7 +89,14 @@ def _seed_scene(scene):
 
 
 def seed_existing_scenes():
-    for scene in bpy.data.scenes:
+    # bpy.data is a _RestrictData proxy during addon enable on install —
+    # accessing .scenes throws AttributeError. Bail; the load_post handler
+    # (and our deferred timer in __init__) will seed when data is real.
+    try:
+        scenes = bpy.data.scenes
+    except AttributeError:
+        return
+    for scene in scenes:
         _seed_scene(scene)
 
 
