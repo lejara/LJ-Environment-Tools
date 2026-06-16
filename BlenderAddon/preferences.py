@@ -10,6 +10,7 @@ _SHARED_PROP_NAMES = (
     "export_animations",
     "export_rig",
     "combine_into_single_fbx",
+    "apply_transforms_on_export",
     "file_name",
 )
 
@@ -45,6 +46,11 @@ def _shared_annotations():
         "combine_into_single_fbx": bpy.props.BoolProperty(
             name="Combine Into Single FBX",
             description="When on, export all selected objects into one FBX file. When off, each object gets its own file",
+            default=False,
+        ),
+        "apply_transforms_on_export": bpy.props.BoolProperty(
+            name="Apply Transforms",
+            description="Before export, duplicate the selected objects, reset the copies' location to (0,0,0) and apply location/rotation/scale. In combined mode, mesh copies are joined first. The copies are deleted after export so the originals stay untouched",
             default=False,
         ),
         "file_name": bpy.props.StringProperty(
@@ -117,6 +123,7 @@ def draw_shared(layout, target):
 
     col = layout.column(heading="Options")
     col.prop(target, "combine_into_single_fbx")
+    col.prop(target, "apply_transforms_on_export")
 
 
 class LJEXPORT_AP_preferences(bpy.types.AddonPreferences):
