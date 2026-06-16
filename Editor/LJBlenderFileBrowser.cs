@@ -9,8 +9,11 @@ namespace LJ.EditorTools
     public static class LJBlenderFileBrowser
     {
         private const string SearchPathPrefKey = "LJ.BlenderBrowser.SearchPath";
-        private const float MaxListHeight = 260f;
         private const int ButtonsPerRow = 4;
+        private const float ButtonHeight = 28f;
+        private const float RowSpacing = 2f;
+        private const int VisibleRows = 3;
+        private const float MaxListHeight = (ButtonHeight + RowSpacing) * VisibleRows + RowSpacing;
 
         private static string _searchPath;
         private static List<string> _indexedFiles;
@@ -21,7 +24,7 @@ namespace LJ.EditorTools
         {
             EnsureInitialized();
 
-            GUILayout.Label("Blender File Browser", EditorStyles.boldLabel);
+            GUILayout.Label("Blender File Browser 🏝️", EditorStyles.boldLabel);
 
             using (new EditorGUILayout.HorizontalScope())
             {
@@ -64,7 +67,9 @@ namespace LJ.EditorTools
 
             EditorGUILayout.LabelField($"Found {_indexedFiles.Count} .blend file(s)", EditorStyles.miniLabel);
 
-            _scroll = EditorGUILayout.BeginScrollView(_scroll, GUILayout.MaxHeight(MaxListHeight));
+            int rowCount = Mathf.CeilToInt(_indexedFiles.Count / (float)ButtonsPerRow);
+            float contentHeight = (ButtonHeight + RowSpacing) * Mathf.Min(rowCount, VisibleRows) + RowSpacing;
+            _scroll = EditorGUILayout.BeginScrollView(_scroll, GUILayout.Height(contentHeight));
             for (int i = 0; i < _indexedFiles.Count; i += ButtonsPerRow)
             {
                 using (new EditorGUILayout.HorizontalScope())
@@ -80,7 +85,7 @@ namespace LJ.EditorTools
 
                         string file = _indexedFiles[index];
                         string label = Path.GetFileNameWithoutExtension(file);
-                        if (GUILayout.Button(new GUIContent(label, file), GUILayout.Height(28), GUILayout.ExpandWidth(true)))
+                        if (GUILayout.Button(new GUIContent(label, file), GUILayout.Height(ButtonHeight), GUILayout.ExpandWidth(true)))
                         {
                             LJBlenderLauncher.LaunchBlendFile(file);
                         }
@@ -98,6 +103,16 @@ namespace LJ.EditorTools
             }
             _searchPath = EditorPrefs.GetString(SearchPathPrefKey, string.Empty);
             _initialized = true;
+        }
+
+        [InitializeOnLoadMethod]
+        private static void AutoIndexOnEditorLoad()
+        {
+            EnsureInitialized();
+            if (!string.IsNullOrEmpty(_searchPath) && Directory.Exists(_searchPath))
+            {
+                IndexFiles();
+            }
         }
 
         private static void IndexFiles()

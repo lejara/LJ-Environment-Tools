@@ -19,7 +19,7 @@ namespace LJ.EditorTools
         {
             _scroll = EditorGUILayout.BeginScrollView(_scroll);
             GUILayout.Space(8);
-            GUILayout.Label("Export", EditorStyles.boldLabel);
+            GUILayout.Label("Exportor 🏃‍♂️", EditorStyles.boldLabel);
 
             int count = Selection.gameObjects.Length;
             EditorGUILayout.LabelField("Selected:", count == 0 ? "Nothing" : $"{count} object(s)");
@@ -31,14 +31,23 @@ namespace LJ.EditorTools
                     LJFbxExporter.ExportSelection();
                 }
 
-                if (GUILayout.Button("Export To Blender", GUILayout.Height(28)))
+                if (GUILayout.Button("Export To Blender 📤", GUILayout.Height(28)))
                 {
                     LJBlenderLauncher.ExportAndOpen();
                 }
             }
 
-            GUILayout.Space(12);
+
+            GUILayout.Space(48);
             LJBlenderFileBrowser.DrawGUI();
+
+            GUILayout.Space(48);
+            LJAutoPrefabCreator.DrawGUI();
+
+            GUILayout.Space(48);
+            HotKeysCheatsheet.DrawGUI();
+
+            GUILayout.Space(48);
 
             EditorGUILayout.EndScrollView();
         }

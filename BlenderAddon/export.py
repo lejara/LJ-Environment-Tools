@@ -10,7 +10,7 @@ from . import preferences
 
 # Move each object to world origin during export so its pivot lands at (0,0,0)
 # in Unity. The original transform is restored after export.
-MOVE_TO_ORIGIN = True
+MOVE_TO_ORIGIN = False
 
 # File overwrite behavior. When False, existing files are skipped.
 OVERWRITE_EXISTING = True

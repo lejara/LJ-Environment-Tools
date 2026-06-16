@@ -1,9 +1,10 @@
+using LJ.EditorTools;
 using UnityEditor;
 using UnityEngine;
 
 public static class AutoPlaceNewObjects
 {
-    [MenuItem("Edit/Deparent Selected %e")]
+    [MenuItem(LJHotkeys.DeparentSelectedMenu)]
     static void DeparentSelected()
     {
         var transforms = Selection.transforms;
