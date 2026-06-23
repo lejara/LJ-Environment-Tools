@@ -9,13 +9,14 @@ Item {
     id: root
     objectName: "ljSubPainterToolsPanel"
     width: 380
-    height: 300
+    height: 340
 
     property string title: "LJ Painter Tools"
 
     readonly property string keyPath: "ljSubPainterTools/exportPath"
     readonly property string keyPreset: "ljSubPainterTools/exportPreset"
     readonly property string keyPresetsFolder: "ljSubPainterTools/presetsFolder"
+    readonly property string keyFilename: "ljSubPainterTools/filename"
 
     readonly property string defaultPresetsFolder:
         "C:/Users/leone/OneDrive/Desktop/Blender Store/Substance Painter/Export Presets"
@@ -28,6 +29,25 @@ Item {
     Component.onCompleted: {
         pathField.text = alg.settings.value(keyPath, "")
         presetsFolderField.text = alg.settings.value(keyPresetsFolder, defaultPresetsFolder)
+        loadProjectFilename()
+    }
+
+    function loadProjectFilename() {
+        if (alg.project.isOpen()) {
+            filenameField.text = alg.project.settings.value(keyFilename, "")
+        } else {
+            filenameField.text = ""
+        }
+    }
+
+    function clearProjectFilename() {
+        filenameField.text = ""
+    }
+
+    function saveProjectFilename() {
+        if (alg.project.isOpen()) {
+            alg.project.settings.setValue(keyFilename, filenameField.text)
+        }
     }
 
     function refreshPresetCombo() {
@@ -48,20 +68,86 @@ Item {
 
     function doExport() {
         if (!pathField.text) {
-            alg.log.warn("LJSubPainterTools: set an export path first")
+            alg.log.warn("LJSubPainterTools: set a root folder first")
+            return
+        }
+        if (!filenameField.text) {
+            alg.log.warn("LJSubPainterTools: set a filename first")
             return
         }
         if (presetCombo.currentIndex < 0) {
             alg.log.warn("LJSubPainterTools: no export preset selected")
             return
         }
+        if (!alg.project.isOpen()) {
+            alg.log.warn("LJSubPainterTools: no project open")
+            return
+        }
 
         alg.settings.setValue(keyPath, pathField.text)
         alg.settings.setValue(keyPreset, presetCombo.currentText)
+        saveProjectFilename()
 
-        alg.log.info("LJSubPainterTools: export → " + pathField.text
-                     + "  preset: " + presetCombo.currentText)
-        // TODO: alg.mapexport.exportDocumentMaps(...)
+        var filename = filenameField.text
+        var rootFolder = pathField.text.replace(/\\/g, "/").replace(/\/+$/, "")
+        var exportFolder = rootFolder + "/" + filename
+        var presetsFolder = presetsFolderField.text.replace(/\\/g, "/").replace(/\/+$/, "")
+        var presetPath = presetsFolder + "/" + presetCombo.currentText + ".spexp"
+
+        if (!alg.fileIO.exists(presetPath)) {
+            alg.log.error("LJSubPainterTools: preset file not found → " + presetPath)
+            return
+        }
+
+        alg.subprocess.call(["cmd.exe", "/c", "mkdir", exportFolder.replace(/\//g, "\\")])
+
+        alg.log.info("LJSubPainterTools: exporting → " + exportFolder
+                     + "  preset: " + presetPath)
+
+        try {
+            var result = alg.mapexport.exportDocumentMaps(
+                presetPath,
+                exportFolder,
+                "png",
+                {padding: "Infinite"},
+                []
+            )
+
+            var renamed = 0
+            for (var stack in result) {
+                var maps = result[stack]
+                for (var mapKey in maps) {
+                    var oldPath = maps[mapKey]
+                    if (!oldPath) continue
+                    oldPath = oldPath.replace(/\\/g, "/")
+                    var slashIdx = oldPath.lastIndexOf("/")
+                    var dir = oldPath.substring(0, slashIdx)
+                    var oldName = oldPath.substring(slashIdx + 1)
+                    var dotIdx = oldName.lastIndexOf(".")
+                    var ext = dotIdx >= 0 ? oldName.substring(dotIdx) : ""
+
+                    var keyParts = mapKey.split("_")
+                    var lastTokenIdx = -1
+                    for (var j = 0; j < keyParts.length; j++) {
+                        if (keyParts[j].charAt(0) === "$") lastTokenIdx = j
+                    }
+                    var mapName = keyParts.slice(lastTokenIdx + 1).join("_")
+                    if (!mapName) mapName = mapKey
+
+                    var newName = filename + "_" + mapName + ext
+                    if (oldName === newName) continue
+                    var srcWin = (dir + "/" + oldName).replace(/\//g, "\\")
+                    var dstWin = (dir + "/" + newName).replace(/\//g, "\\")
+                    alg.subprocess.call(["cmd.exe", "/c", "move", "/y", srcWin, dstWin])
+                    renamed++
+                }
+            }
+
+            alg.log.info("LJSubPainterTools: exported " + renamed + " maps to " + exportFolder)
+        } catch (e) {
+            alg.log.error("LJSubPainterTools: export failed → " + e)
+            alg.log.exception(e)
+        }
     }
 
     function urlToLocalPath(url) {
@@ -108,7 +194,7 @@ Item {
             onActivated: alg.settings.setValue(root.keyPreset, currentText)
         }
 
-        AlgLabel { text: "Output Path" }
+        AlgLabel { text: "Root Folder" }
         RowLayout {
             Layout.fillWidth: true
             spacing: 4
@@ -124,6 +210,13 @@ Item {
                 implicitWidth: 32
                 onClicked: folderDialog.open()
             }
+        }
+
+        AlgLabel { text: "Filename (appended to each texture)" }
+        AlgTextEdit {
+            id: filenameField
+            Layout.fillWidth: true
+            onTextChanged: root.saveProjectFilename()
         }
 
         AlgButton {
