@@ -42,6 +42,8 @@ namespace LJ.EditorTools
             if (!_expanded)
                 return;
 
+            GUILayout.Space(LJEnvironmentTools.FoldoutPadding);
+
             var shortcutStyle = new GUIStyle(EditorStyles.boldLabel) { fixedWidth = 100 };
 
             foreach (var entry in LJHotkeys.All)
@@ -56,6 +58,8 @@ namespace LJ.EditorTools
                     }
                 }
             }
+
+            GUILayout.Space(LJEnvironmentTools.FoldoutPadding);
         }
     }
 }

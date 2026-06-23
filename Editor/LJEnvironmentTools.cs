@@ -6,8 +6,10 @@ namespace LJ.EditorTools
     public class LJEnvironmentTools : EditorWindow
     {
         private const string WindowTitle = "LJ Environment Tools";
+        public const int FoldoutPadding = 24;
 
         private Vector2 _scroll;
+        private bool _exporterExpanded = true;
 
         [MenuItem("Tools/LJ/Environment Tools")]
         public static void ShowWindow()
@@ -19,35 +21,47 @@ namespace LJ.EditorTools
         {
             _scroll = EditorGUILayout.BeginScrollView(_scroll);
             GUILayout.Space(8);
-            GUILayout.Label("Exportor 🏃‍♂️", EditorStyles.boldLabel);
-
-            int count = Selection.gameObjects.Length;
-            EditorGUILayout.LabelField("Selected:", count == 0 ? "Nothing" : $"{count} object(s)");
-
-            using (new EditorGUI.DisabledScope(count == 0))
+            _exporterExpanded = EditorGUILayout.Foldout(_exporterExpanded, "Exportor 🏃‍♂️", true, EditorStyles.foldoutHeader);
+            if (_exporterExpanded)
             {
-                if (GUILayout.Button("Export Selection to FBX", GUILayout.Height(28)))
+                GUILayout.Space(FoldoutPadding);
+
+                int count = Selection.gameObjects.Length;
+                EditorGUILayout.LabelField("Selected:", count == 0 ? "Nothing" : $"{count} object(s)");
+
+                using (new EditorGUI.DisabledScope(count == 0))
                 {
-                    LJFbxExporter.ExportSelection();
+                    if (GUILayout.Button("Export Selection to FBX", GUILayout.Height(28)))
+                    {
+                        LJFbxExporter.ExportSelection();
+                    }
+
+                    if (GUILayout.Button("Export To Blender 📤", GUILayout.Height(28)))
+                    {
+                        LJBlenderLauncher.ExportAndOpen();
+                    }
                 }
 
-                if (GUILayout.Button("Export To Blender 📤", GUILayout.Height(28)))
-                {
-                    LJBlenderLauncher.ExportAndOpen();
-                }
+                GUILayout.Space(FoldoutPadding);
             }
 
 
-            GUILayout.Space(48);
+            GUILayout.Space(8);
             LJBlenderFileBrowser.DrawGUI();
 
-            GUILayout.Space(48);
+            GUILayout.Space(8);
+            LJSubstancePainterFileBrowser.DrawGUI();
+
+            GUILayout.Space(8);
+            LJSubstanceDesignerFileBrowser.DrawGUI();
+
+            GUILayout.Space(8);
             LJAutoPrefabCreator.DrawGUI();
 
-            GUILayout.Space(48);
+            GUILayout.Space(8);
             HotKeysCheatsheet.DrawGUI();
 
-            GUILayout.Space(48);
+            GUILayout.Space(8);
 
             EditorGUILayout.EndScrollView();
         }

@@ -23,6 +23,7 @@ namespace LJ.EditorTools
         private static HashSet<string> _snapshot;
         private static bool _optionsExpanded;
         private static bool _optionStaticMesh;
+        private static bool _sectionExpanded = true;
 
         public static bool Enabled
         {
@@ -46,7 +47,11 @@ namespace LJ.EditorTools
         {
             EnsureInitialized();
 
-            GUILayout.Label("Auto Prefab Creator ✨", EditorStyles.boldLabel);
+            _sectionExpanded = EditorGUILayout.Foldout(_sectionExpanded, "Auto Prefab Creator ✨", true, EditorStyles.foldoutHeader);
+            if (!_sectionExpanded)
+                return;
+
+            GUILayout.Space(LJEnvironmentTools.FoldoutPadding);
 
             DrawFolderField("Export Path", ref _exportPath, ExportPathPrefKey, "Select FBX export folder (inside Assets/)");
             DrawFolderField("Prefab Path", ref _prefabPath, PrefabPathPrefKey, "Select prefab output folder (inside Assets/)");
@@ -72,6 +77,8 @@ namespace LJ.EditorTools
             {
                 EditorGUILayout.HelpBox("Enable to snapshot existing fbx files in Export Path. New fbx files imported into that folder will become prefabs in Prefab Path.", MessageType.Info);
             }
+
+            GUILayout.Space(LJEnvironmentTools.FoldoutPadding);
         }
 
         public static void OnFbxImported(string[] importedAssets)
