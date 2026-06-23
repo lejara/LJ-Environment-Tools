@@ -11,6 +11,8 @@ namespace LJ.EditorTools
         public enum ShaderType
         {
             BetterLit = 0,
+            HDRPLit = 1,
+            URPLit = 2,
         }
 
         private const string EnabledPrefKey = "LJ.AutoMaterial.Enabled";
@@ -24,8 +26,59 @@ namespace LJ.EditorTools
         private const string AlbedoKeyword = "Albedo";
         private const string MaskMapKeyword = "Mask_Map";
         private const string NormalKeyword = "Normal";
+        private const string MetallicSmoothnessKeyword = "MetallicSmoothness";
+        private const string OcclusionKeyword = "Occlusion";
 
-        private const string BetterLitShaderName = "Better Lit/Lit";
+        private class TextureSlot
+        {
+            public string Keyword;
+            public string[] ExcludeKeywords;
+            public string Property;
+            public bool ForceLinear;
+            public bool ForceNormalMap;
+            public bool Required;
+        }
+
+        private class ShaderConfig
+        {
+            public string ShaderName;
+            public TextureSlot[] Slots;
+        }
+
+        private static readonly Dictionary<ShaderType, ShaderConfig> _configs = new Dictionary<ShaderType, ShaderConfig>
+        {
+            [ShaderType.BetterLit] = new ShaderConfig
+            {
+                ShaderName = "Better Lit/Lit",
+                Slots = new[]
+                {
+                    new TextureSlot { Keyword = AlbedoKeyword, Property = "_AlbedoMap", Required = true },
+                    new TextureSlot { Keyword = MaskMapKeyword, Property = "_MaskMap", ForceLinear = true, Required = true },
+                    new TextureSlot { Keyword = NormalKeyword, ExcludeKeywords = new[] { MaskMapKeyword }, Property = "_NormalMap", ForceNormalMap = true, Required = true },
+                },
+            },
+            [ShaderType.HDRPLit] = new ShaderConfig
+            {
+                ShaderName = "HDRP/Lit",
+                Slots = new[]
+                {
+                    new TextureSlot { Keyword = AlbedoKeyword, Property = "_BaseColorMap", Required = true },
+                    new TextureSlot { Keyword = MaskMapKeyword, Property = "_MaskMap", ForceLinear = true, Required = true },
+                    new TextureSlot { Keyword = NormalKeyword, ExcludeKeywords = new[] { MaskMapKeyword }, Property = "_NormalMap", ForceNormalMap = true, Required = true },
+                },
+            },
+            [ShaderType.URPLit] = new ShaderConfig
+            {
+                ShaderName = "Universal Render Pipeline/Lit",
+                Slots = new[]
+                {
+                    new TextureSlot { Keyword = AlbedoKeyword, Property = "_BaseMap", Required = true },
+                    new TextureSlot { Keyword = MetallicSmoothnessKeyword, Property = "_MetallicGlossMap", ForceLinear = true, Required = true },
+                    new TextureSlot { Keyword = NormalKeyword, ExcludeKeywords = new[] { MaskMapKeyword, MetallicSmoothnessKeyword }, Property = "_BumpMap", ForceNormalMap = true, Required = true },
+                    new TextureSlot { Keyword = OcclusionKeyword, Property = "_OcclusionMap", ForceLinear = true, Required = false },
+                },
+            },
+        };
 
         private static bool _initialized;
         private static bool _enabled;
@@ -46,10 +99,7 @@ namespace LJ.EditorTools
             EditorApplication.delayCall += () =>
             {
                 EnsureInitialized();
-                if (_enabled)
-                {
-                    TakeSnapshot();
-                }
+                TakeSnapshot();
             };
         }
 
@@ -111,13 +161,44 @@ namespace LJ.EditorTools
             }
             else
             {
+                ShaderConfig hint = _configs[_shaderType];
                 EditorGUILayout.HelpBox(
                     "Enable to watch the Root Path. When a subfolder contains textures named " +
-                    "Albedo, Mask_Map, and Normal, a material is created in that subfolder using the selected shader.",
+                    JoinKeywords(hint) + ", a material is created in that subfolder using the selected shader.",
                     MessageType.Info);
             }
 
             GUILayout.Space(LJEnvironmentTools.FoldoutPadding);
+        }
+
+        public static void OnAssetsRemoved(string[] deletedAssets, string[] movedFromAssetPaths)
+        {
+            EnsureInitialized();
+            if (!_enabled) return;
+
+            string root = NormalizeAssetsPath(_rootPath);
+            if (string.IsNullOrEmpty(root)) return;
+            string prefix = root + "/";
+
+            if (PathsTouchRoot(deletedAssets, prefix) || PathsTouchRoot(movedFromAssetPaths, prefix))
+            {
+                TakeSnapshot();
+            }
+        }
+
+        private static bool PathsTouchRoot(string[] paths, string prefix)
+        {
+            if (paths == null) return false;
+            foreach (string assetPath in paths)
+            {
+                if (string.IsNullOrEmpty(assetPath)) continue;
+                string normalized = assetPath.Replace('\\', '/');
+                if (normalized.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         public static void OnAssetsImported(string[] importedAssets)
@@ -197,6 +278,8 @@ namespace LJ.EditorTools
         {
             if (!AssetDatabase.IsValidFolder(subfolder)) return false;
 
+            ShaderConfig config = _configs[_shaderType];
+
             string folderName = Path.GetFileName(subfolder);
             string materialPath = GetMaterialPath(subfolder, folderName);
             if (materialPath == null) return false;
@@ -210,35 +293,53 @@ namespace LJ.EditorTools
                 return true;
             }
 
-            Texture2D albedo = FindTextureByKeyword(subfolder, AlbedoKeyword);
-            Texture2D maskMap = FindTextureByKeyword(subfolder, MaskMapKeyword);
-            Texture2D normal = FindTextureByKeyword(subfolder, NormalKeyword, MaskMapKeyword);
+            var found = new Dictionary<TextureSlot, Texture2D>();
+            foreach (TextureSlot slot in config.Slots)
+            {
+                Texture2D tex = FindTextureByKeyword(subfolder, slot.Keyword, slot.ExcludeKeywords);
+                if (tex != null) found[slot] = tex;
+            }
 
             if (requireAll)
             {
-                if (albedo == null || maskMap == null || normal == null) return false;
-            }
-            else
-            {
-                if (albedo == null && maskMap == null && normal == null)
+                foreach (TextureSlot slot in config.Slots)
                 {
-                    Debug.LogWarning($"{LJFbxExporter.LogPrefix} Auto Material — no supported textures (Albedo, Mask_Map, Normal) found in {subfolder}.");
-                    return false;
+                    if (slot.Required && !found.ContainsKey(slot)) return false;
                 }
             }
-
-            Material material = CreateMaterialForShader(_shaderType);
-            if (material == null)
+            else if (found.Count == 0)
             {
+                Debug.LogWarning($"{LJFbxExporter.LogPrefix} Auto Material — no supported textures ({JoinKeywords(config)}) found in {subfolder}.");
                 return false;
             }
 
-            EnsureNormalMapImport(normal);
-            ApplyTextures(material, _shaderType, albedo, maskMap, normal);
+            Shader shader = Shader.Find(config.ShaderName);
+            if (shader == null)
+            {
+                Debug.LogWarning($"{LJFbxExporter.LogPrefix} Auto Material — shader '{config.ShaderName}' not found.");
+                return false;
+            }
+            Material material = new Material(shader);
+
+            foreach (var kvp in found)
+            {
+                TextureSlot slot = kvp.Key;
+                Texture2D tex = kvp.Value;
+                if (slot.ForceNormalMap) EnsureNormalMapImport(tex);
+                else if (slot.ForceLinear) EnsureLinearImport(tex);
+                SetTextureIfPresent(material, slot.Property, tex);
+            }
 
             AssetDatabase.CreateAsset(material, materialPath);
             Debug.Log($"{LJFbxExporter.LogPrefix} Auto Material — created {materialPath} ({_shaderType})");
             return true;
+        }
+
+        private static string JoinKeywords(ShaderConfig config)
+        {
+            string[] kws = new string[config.Slots.Length];
+            for (int i = 0; i < config.Slots.Length; i++) kws[i] = config.Slots[i].Keyword;
+            return string.Join(", ", kws);
         }
 
         private static void CreateMaterialForSelection()
@@ -262,7 +363,7 @@ namespace LJ.EditorTools
 
             if (folders.Count == 0)
             {
-                Debug.LogWarning($"{LJFbxExporter.LogPrefix} Auto Material — select at least one texture named Albedo, Mask_Map, or Normal in the Project window.");
+                Debug.LogWarning($"{LJFbxExporter.LogPrefix} Auto Material — select at least one texture named {JoinKeywords(_configs[_shaderType])} in the Project window.");
                 return;
             }
 
@@ -307,40 +408,12 @@ namespace LJ.EditorTools
         private static bool IsSupportedTextureName(string fileName)
         {
             if (string.IsNullOrEmpty(fileName)) return false;
-            return fileName.IndexOf(AlbedoKeyword, StringComparison.OrdinalIgnoreCase) >= 0
-                || fileName.IndexOf(MaskMapKeyword, StringComparison.OrdinalIgnoreCase) >= 0
-                || fileName.IndexOf(NormalKeyword, StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
-        private static Material CreateMaterialForShader(ShaderType type)
-        {
-            switch (type)
+            ShaderConfig config = _configs[_shaderType];
+            foreach (TextureSlot slot in config.Slots)
             {
-                case ShaderType.BetterLit:
-                {
-                    Shader shader = Shader.Find(BetterLitShaderName);
-                    if (shader == null)
-                    {
-                        Debug.LogWarning($"{LJFbxExporter.LogPrefix} Auto Material — shader '{BetterLitShaderName}' not found.");
-                        return null;
-                    }
-                    return new Material(shader);
-                }
+                if (fileName.IndexOf(slot.Keyword, StringComparison.OrdinalIgnoreCase) >= 0) return true;
             }
-            Debug.LogWarning($"{LJFbxExporter.LogPrefix} Auto Material — shader type {type} is not supported yet.");
-            return null;
-        }
-
-        private static void ApplyTextures(Material material, ShaderType type, Texture2D albedo, Texture2D maskMap, Texture2D normal)
-        {
-            switch (type)
-            {
-                case ShaderType.BetterLit:
-                    SetTextureIfPresent(material, "_AlbedoMap", albedo);
-                    SetTextureIfPresent(material, "_MaskMap", maskMap);
-                    SetTextureIfPresent(material, "_NormalMap", normal);
-                    break;
-            }
+            return false;
         }
 
         private static void SetTextureIfPresent(Material material, string property, Texture2D texture)
@@ -366,6 +439,20 @@ namespace LJ.EditorTools
             if (importer.textureType == TextureImporterType.NormalMap) return;
 
             importer.textureType = TextureImporterType.NormalMap;
+            importer.SaveAndReimport();
+        }
+
+        private static void EnsureLinearImport(Texture2D texture)
+        {
+            if (texture == null) return;
+            string path = AssetDatabase.GetAssetPath(texture);
+            if (string.IsNullOrEmpty(path)) return;
+
+            TextureImporter importer = AssetImporter.GetAtPath(path) as TextureImporter;
+            if (importer == null) return;
+            if (!importer.sRGBTexture) return;
+
+            importer.sRGBTexture = false;
             importer.SaveAndReimport();
         }
 
@@ -565,6 +652,7 @@ namespace LJ.EditorTools
         private static void OnPostprocessAllAssets(string[] importedAssets, string[] deletedAssets, string[] movedAssets, string[] movedFromAssetPaths)
         {
             if (!LJAutoMaterialCreator.Enabled) return;
+            LJAutoMaterialCreator.OnAssetsRemoved(deletedAssets, movedFromAssetPaths);
             LJAutoMaterialCreator.OnAssetsImported(importedAssets);
             LJAutoMaterialCreator.OnAssetsImported(movedAssets);
         }
