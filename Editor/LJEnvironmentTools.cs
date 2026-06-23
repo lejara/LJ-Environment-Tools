@@ -6,6 +6,7 @@ namespace LJ.EditorTools
     public class LJEnvironmentTools : EditorWindow
     {
         private const string WindowTitle = "LJ Environment Tools";
+        private const string ExporterExpandedPrefKey = "LJ.EnvTools.ExporterExpanded";
         public const int FoldoutPadding = 24;
 
         private Vector2 _scroll;
@@ -17,11 +18,26 @@ namespace LJ.EditorTools
             GetWindow<LJEnvironmentTools>(WindowTitle);
         }
 
+        private void OnEnable()
+        {
+            _exporterExpanded = EditorPrefs.GetBool(ExporterExpandedPrefKey, true);
+        }
+
+        private void OnSelectionChange()
+        {
+            Repaint();
+        }
+
         private void OnGUI()
         {
             _scroll = EditorGUILayout.BeginScrollView(_scroll);
             GUILayout.Space(8);
+            EditorGUI.BeginChangeCheck();
             _exporterExpanded = EditorGUILayout.Foldout(_exporterExpanded, "Exportor 🏃‍♂️", true, EditorStyles.foldoutHeader);
+            if (EditorGUI.EndChangeCheck())
+            {
+                EditorPrefs.SetBool(ExporterExpandedPrefKey, _exporterExpanded);
+            }
             if (_exporterExpanded)
             {
                 GUILayout.Space(FoldoutPadding);
@@ -47,16 +63,10 @@ namespace LJ.EditorTools
 
 
             GUILayout.Space(8);
-            LJBlenderFileBrowser.DrawGUI();
-
-            GUILayout.Space(8);
-            LJSubstancePainterFileBrowser.DrawGUI();
-
-            GUILayout.Space(8);
-            LJSubstanceDesignerFileBrowser.DrawGUI();
-
-            GUILayout.Space(8);
             LJAutoPrefabCreator.DrawGUI();
+
+            GUILayout.Space(8);
+            LJAutoMaterialCreator.DrawGUI();
 
             GUILayout.Space(8);
             HotKeysCheatsheet.DrawGUI();

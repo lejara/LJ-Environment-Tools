@@ -14,6 +14,7 @@ namespace LJ.EditorTools
         private const string SnapshotPrefKey = "LJ.AutoPrefab.Snapshot";
         private const string OptionsExpandedPrefKey = "LJ.AutoPrefab.OptionsExpanded";
         private const string OptionStaticMeshPrefKey = "LJ.AutoPrefab.Option.StaticMesh";
+        private const string SectionExpandedPrefKey = "LJ.AutoPrefab.SectionExpanded";
         private const char SnapshotSeparator = '|';
 
         private static bool _initialized;
@@ -47,7 +48,12 @@ namespace LJ.EditorTools
         {
             EnsureInitialized();
 
+            EditorGUI.BeginChangeCheck();
             _sectionExpanded = EditorGUILayout.Foldout(_sectionExpanded, "Auto Prefab Creator ✨", true, EditorStyles.foldoutHeader);
+            if (EditorGUI.EndChangeCheck())
+            {
+                EditorPrefs.SetBool(SectionExpandedPrefKey, _sectionExpanded);
+            }
             if (!_sectionExpanded)
                 return;
 
@@ -311,6 +317,7 @@ namespace LJ.EditorTools
             _prefabPath = EditorPrefs.GetString(PrefabPathPrefKey, string.Empty);
             _optionsExpanded = EditorPrefs.GetBool(OptionsExpandedPrefKey, false);
             _optionStaticMesh = EditorPrefs.GetBool(OptionStaticMeshPrefKey, false);
+            _sectionExpanded = EditorPrefs.GetBool(SectionExpandedPrefKey, true);
 
             _snapshot = new HashSet<string>();
             string raw = EditorPrefs.GetString(SnapshotPrefKey, string.Empty);

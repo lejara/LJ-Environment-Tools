@@ -40,7 +40,12 @@ namespace LJ.EditorTools
         {
             EnsureInitialized();
 
+            EditorGUI.BeginChangeCheck();
             _expanded = EditorGUILayout.Foldout(_expanded, _title, true, EditorStyles.foldoutHeader);
+            if (EditorGUI.EndChangeCheck())
+            {
+                EditorPrefs.SetBool(_prefKey + ".Expanded", _expanded);
+            }
             if (!_expanded)
                 return;
 
@@ -134,6 +139,7 @@ namespace LJ.EditorTools
                 return;
             }
             _searchPath = EditorPrefs.GetString(_prefKey, string.Empty);
+            _expanded = EditorPrefs.GetBool(_prefKey + ".Expanded", true);
             _initialized = true;
         }
 

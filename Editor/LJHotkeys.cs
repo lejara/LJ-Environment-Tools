@@ -34,11 +34,25 @@ namespace LJ.EditorTools
 
     public static class HotKeysCheatsheet
     {
+        private const string ExpandedPrefKey = "LJ.HotKeysCheatsheet.Expanded";
+
+        private static bool _initialized;
         private static bool _expanded = true;
 
         public static void DrawGUI()
         {
+            if (!_initialized)
+            {
+                _expanded = EditorPrefs.GetBool(ExpandedPrefKey, true);
+                _initialized = true;
+            }
+
+            EditorGUI.BeginChangeCheck();
             _expanded = EditorGUILayout.Foldout(_expanded, "HotKeys Cheatsheet ⌨️", true, EditorStyles.foldoutHeader);
+            if (EditorGUI.EndChangeCheck())
+            {
+                EditorPrefs.SetBool(ExpandedPrefKey, _expanded);
+            }
             if (!_expanded)
                 return;
 
