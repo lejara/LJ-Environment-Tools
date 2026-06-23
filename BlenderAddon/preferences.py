@@ -15,6 +15,14 @@ _SHARED_PROP_NAMES = (
 )
 
 
+# Other modules append entries: {"<module_key>": draw_fn(layout, target)}.
+# Each draw_fn renders that module's globals in the AddonPreferences UI.
+# Blender allows only one AddonPreferences class per addon, so modules
+# also merge their annotations into LJEXPORT_AP_preferences.__annotations__
+# at import time.
+addon_prefs_draw_extras = {}
+
+
 def _shared_annotations():
     return {
         "export_path": bpy.props.StringProperty(
@@ -134,6 +142,8 @@ class LJEXPORT_AP_preferences(bpy.types.AddonPreferences):
         layout = self.layout
         layout.label(text="Defaults for new blend files. Per-file values live in View3D > N > LJ.")
         draw_shared(layout, self)
+        for fn in addon_prefs_draw_extras.values():
+            fn(layout, self)
 
 
 class LJEXPORT_PG_scene(bpy.types.PropertyGroup):

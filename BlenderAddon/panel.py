@@ -13,7 +13,7 @@ class LJEXPORT_PT_panel(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        layout.label(text="For all your exporting needs! 🚗")
+        layout.label(text="For all youssssr exporting needs! 🚗")
 
         layout.separator()
 
