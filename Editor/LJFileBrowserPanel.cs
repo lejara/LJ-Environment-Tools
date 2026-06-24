@@ -13,6 +13,14 @@ namespace LJ.EditorTools
         private const float RowSpacing = 2f;
         private const int VisibleRows = 3;
 
+        private static readonly string[] _ignoredNames = new[]
+        {
+            ".autosave",
+            "*_autosave_*",
+        };
+
+        private static readonly char[] _pathSeparators = new[] { '\\', '/' };
+
         private readonly string _title;
         private readonly string _extension;
         private readonly string _fileTypeLabel;
@@ -159,10 +167,9 @@ namespace LJ.EditorTools
                 foreach (string file in found)
                 {
                     string ext = Path.GetExtension(file);
-                    if (string.Equals(ext, _extension, StringComparison.OrdinalIgnoreCase))
-                    {
-                        _indexedFiles.Add(file);
-                    }
+                    if (!string.Equals(ext, _extension, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (IsIgnored(file, _searchPath)) continue;
+                    _indexedFiles.Add(file);
                 }
                 _indexedFiles.Sort(StringComparer.OrdinalIgnoreCase);
                 Debug.Log($"{_logPrefix} Indexed {_indexedFiles.Count} {_extension} file(s) under {_searchPath}");
@@ -171,6 +178,41 @@ namespace LJ.EditorTools
             {
                 Debug.LogError($"{_logPrefix} Failed to index {_extension} files: {e.Message}");
             }
+        }
+
+        private static bool IsIgnored(string fullPath, string searchPath)
+        {
+            string rel = fullPath.Length > searchPath.Length
+                ? fullPath.Substring(searchPath.Length)
+                : fullPath;
+            string[] segments = rel.Split(_pathSeparators, StringSplitOptions.RemoveEmptyEntries);
+            foreach (string segment in segments)
+            {
+                foreach (string pattern in _ignoredNames)
+                {
+                    if (MatchesPattern(segment, pattern)) return true;
+                }
+            }
+            return false;
+        }
+
+        private static bool MatchesPattern(string segment, string pattern)
+        {
+            if (string.IsNullOrEmpty(pattern)) return false;
+            bool wildStart = pattern[0] == '*';
+            bool wildEnd = pattern.Length > 1 && pattern[pattern.Length - 1] == '*';
+            int coreStart = wildStart ? 1 : 0;
+            int coreEnd = wildEnd ? pattern.Length - 1 : pattern.Length;
+            string core = pattern.Substring(coreStart, coreEnd - coreStart);
+
+            if (wildStart && wildEnd)
+            {
+                if (core.Length == 0) return true;
+                return segment.IndexOf(core, StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            if (wildStart) return segment.EndsWith(core, StringComparison.OrdinalIgnoreCase);
+            if (wildEnd) return segment.StartsWith(core, StringComparison.OrdinalIgnoreCase);
+            return string.Equals(segment, pattern, StringComparison.OrdinalIgnoreCase);
         }
     }
 }
