@@ -85,17 +85,9 @@ namespace LJ.EditorTools
                 }
             }
 
-            using (new EditorGUI.DisabledScope(string.IsNullOrEmpty(_searchPath) || !Directory.Exists(_searchPath)))
-            {
-                if (GUILayout.Button($"Index {_fileTypeLabel} Files", GUILayout.Height(24)))
-                {
-                    IndexFiles();
-                }
-            }
-
             if (_indexedFiles == null || _indexedFiles.Count == 0)
             {
-                EditorGUILayout.HelpBox($"No {_extension} files indexed yet. Pick a folder and press Index.", MessageType.Info);
+                EditorGUILayout.HelpBox($"No {_extension} files indexed yet. Pick a folder and press Refresh Index.", MessageType.Info);
                 GUILayout.Space(LJEnvironmentTools.FoldoutPadding);
                 return;
             }
@@ -139,6 +131,12 @@ namespace LJ.EditorTools
             {
                 IndexFiles();
             }
+        }
+
+        public void RefreshIndex()
+        {
+            EnsureInitialized();
+            IndexFiles();
         }
 
         private void EnsureInitialized()

@@ -15,6 +15,8 @@ namespace LJ.EditorTools
 
         public static void DrawGUI() => _panel.DrawGUI();
 
+        public static void RefreshIndex() => _panel.RefreshIndex();
+
         [InitializeOnLoadMethod]
         private static void AutoIndexOnEditorLoad() => _panel.AutoIndexOnLoad();
     }

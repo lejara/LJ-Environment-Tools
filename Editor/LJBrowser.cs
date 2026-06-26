@@ -29,6 +29,14 @@ namespace LJ.EditorTools
             LJSubstanceDesignerFileBrowser.DrawGUI();
 
             GUILayout.Space(8);
+            if (GUILayout.Button("Refresh Index 🔄", GUILayout.Height(28)))
+            {
+                LJBlenderFileBrowser.RefreshIndex();
+                LJSubstancePainterFileBrowser.RefreshIndex();
+                LJSubstanceDesignerFileBrowser.RefreshIndex();
+            }
+
+            GUILayout.Space(8);
             EditorGUILayout.EndScrollView();
         }
     }
