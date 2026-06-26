@@ -5,7 +5,7 @@ PainterPlugin {
     property var panel: null
 
     Component.onCompleted: {
-        alg.log.info("LJSubPainterTools: loaded")
+        alg.log.info("LJSubPainterExportTool: loaded")
         panel = alg.ui.addDockWidget(Qt.resolvedUrl("panel.qml"))
     }
 

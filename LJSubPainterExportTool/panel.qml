@@ -7,16 +7,16 @@ import AlgWidgets.Style 2.0
 
 Item {
     id: root
-    objectName: "ljSubPainterToolsPanel"
+    objectName: "LJ Export Tool"
     width: 380
     height: 340
 
-    property string title: "LJ Painter Tools"
+    property string title: "LJ Export Tool"
 
-    readonly property string keyPath: "ljSubPainterTools/exportPath"
-    readonly property string keyPreset: "ljSubPainterTools/exportPreset"
-    readonly property string keyPresetsFolder: "ljSubPainterTools/presetsFolder"
-    readonly property string keyFilename: "ljSubPainterTools/filename"
+    readonly property string keyPath: "ljSubPainterExportTool/exportPath"
+    readonly property string keyPreset: "ljSubPainterExportTool/exportPreset"
+    readonly property string keyPresetsFolder: "ljSubPainterExportTool/presetsFolder"
+    readonly property string keyFilename: "ljSubPainterExportTool/filename"
 
     readonly property string defaultPresetsFolder:
         "C:/Users/leone/OneDrive/Desktop/Blender Store/Substance Painter/Export Presets"
@@ -63,24 +63,24 @@ Item {
         var idx = names.indexOf(saved)
         presetCombo.currentIndex = idx >= 0 ? idx : (names.length ? 0 : -1)
 
-        alg.log.info("LJSubPainterTools: loaded " + names.length + " presets from " + presetsFolderUrl)
+        alg.log.info("LJSubPainterExportTool: loaded " + names.length + " presets from " + presetsFolderUrl)
     }
 
     function doExport() {
         if (!pathField.text) {
-            alg.log.warn("LJSubPainterTools: set a root folder first")
+            alg.log.warn("LJSubPainterExportTool: set a root folder first")
             return
         }
         if (!filenameField.text) {
-            alg.log.warn("LJSubPainterTools: set a filename first")
+            alg.log.warn("LJSubPainterExportTool: set a filename first")
             return
         }
         if (presetCombo.currentIndex < 0) {
-            alg.log.warn("LJSubPainterTools: no export preset selected")
+            alg.log.warn("LJSubPainterExportTool: no export preset selected")
             return
         }
         if (!alg.project.isOpen()) {
-            alg.log.warn("LJSubPainterTools: no project open")
+            alg.log.warn("LJSubPainterExportTool: no project open")
             return
         }
 
@@ -95,13 +95,13 @@ Item {
         var presetPath = presetsFolder + "/" + presetCombo.currentText + ".spexp"
 
         if (!alg.fileIO.exists(presetPath)) {
-            alg.log.error("LJSubPainterTools: preset file not found → " + presetPath)
+            alg.log.error("LJSubPainterExportTool: preset file not found → " + presetPath)
             return
         }
 
         alg.subprocess.call(["cmd.exe", "/c", "mkdir", exportFolder.replace(/\//g, "\\")])
 
-        alg.log.info("LJSubPainterTools: exporting → " + exportFolder
+        alg.log.info("LJSubPainterExportTool: exporting → " + exportFolder
                      + "  preset: " + presetPath)
 
         try {
@@ -143,9 +143,9 @@ Item {
                 }
             }
 
-            alg.log.info("LJSubPainterTools: exported " + renamed + " maps to " + exportFolder)
+            alg.log.info("LJSubPainterExportTool: exported " + renamed + " maps to " + exportFolder)
         } catch (e) {
-            alg.log.error("LJSubPainterTools: export failed → " + e)
+            alg.log.error("LJSubPainterExportTool: export failed → " + e)
             alg.log.exception(e)
         }
     }

@@ -17,6 +17,7 @@ namespace LJ.EditorTools
         {
             ".autosave",
             "*_autosave_*",
+            "*_ver_*"
         };
 
         private static readonly char[] _pathSeparators = new[] { '\\', '/' };
