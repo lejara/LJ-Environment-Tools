@@ -1,10 +1,11 @@
 import os
+import subprocess
 
 import substance_painter.logging
 import substance_painter.project
 import substance_painter.ui
 
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 
 try:
     import shiboken6
@@ -18,6 +19,7 @@ from . import project_iterate, tile_view
 
 _DEFAULT_TILES_PER_ROW = 4
 _REFRESH_INTERVAL_MS = 500
+_HANDOFF_CLOSE_DELAY_MS = 1500
 
 _SETTINGS_ORG = "LJ"
 _SETTINGS_APP = "PainterIterate"
@@ -97,15 +99,20 @@ class _PreviewScrollArea(QtWidgets.QScrollArea):
 
 class _IterationTile(QtWidgets.QFrame):
     def __init__(
-        self, identifier, pixmap, cell_w, cell_img_h, on_capture, on_open
+        self, identifier, pixmap, cell_w, cell_img_h, on_capture, on_open,
+        on_delete
     ):
         super().__init__()
         self.setObjectName("ljTile")
         self.identifier = identifier
         self._on_open = on_open
+        self._on_delete = on_delete
+        self._is_active = False
         self.setFixedWidth(cell_w)
         self.setCursor(QtCore.Qt.PointingHandCursor)
         self.setToolTip(f"Open '{identifier}'")
+        self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._show_context_menu)
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -122,9 +129,12 @@ class _IterationTile(QtWidgets.QFrame):
             QtCore.Qt.KeepAspectRatio,
             QtCore.Qt.SmoothTransformation,
         )
+        self._bright_pixmap = scaled
+        self._dim_pixmap = self._make_dim_pixmap(scaled)
         holder.setPixmap(scaled)
-        holder.clicked.connect(lambda i=identifier: on_open(i))
+        holder.clicked.connect(self._handle_click)
         layout.addWidget(holder)
+        self._holder = holder
 
         btn = QtWidgets.QToolButton(holder)
         btn.setText("↻")
@@ -147,14 +157,58 @@ class _IterationTile(QtWidgets.QFrame):
         name.setAlignment(QtCore.Qt.AlignCenter)
         name.setStyleSheet("color: #ddd;")
         name.setCursor(QtCore.Qt.PointingHandCursor)
-        name.clicked.connect(lambda i=identifier: on_open(i))
+        name.clicked.connect(self._handle_click)
         layout.addWidget(name)
+        self._name_label = name
+
+    @staticmethod
+    def _make_dim_pixmap(pixmap):
+        out = QtGui.QPixmap(pixmap)
+        painter = QtGui.QPainter(out)
+        painter.fillRect(out.rect(), QtGui.QColor(0, 0, 0, 160))
+        painter.end()
+        return out
+
+    def set_active(self, active):
+        active = bool(active)
+        if active == self._is_active:
+            return
+        self._is_active = active
+        cursor = (
+            QtCore.Qt.ArrowCursor if active else QtCore.Qt.PointingHandCursor
+        )
+        self.setCursor(cursor)
+        self._holder.setCursor(cursor)
+        self._name_label.setCursor(cursor)
+        if active:
+            self.setToolTip(f"'{self.identifier}' is currently open")
+            self._holder.setPixmap(self._dim_pixmap)
+            self._name_label.setStyleSheet("color: #888;")
+        else:
+            self.setToolTip(f"Open '{self.identifier}'")
+            self._holder.setPixmap(self._bright_pixmap)
+            self._name_label.setStyleSheet("color: #ddd;")
+
+    def _handle_click(self):
+        if self._is_active:
+            return
+        self._on_open(self.identifier)
 
     def mousePressEvent(self, event):
         if event.button() == QtCore.Qt.LeftButton:
+            if self._is_active:
+                event.accept()
+                return
             self._on_open(self.identifier)
             return
         super().mousePressEvent(event)
+
+    def _show_context_menu(self, pos):
+        menu = QtWidgets.QMenu(self)
+        delete_action = menu.addAction("Delete from disk")
+        chosen = menu.exec(self.mapToGlobal(pos))
+        if chosen is delete_action:
+            self._on_delete(self.identifier)
 
     def highlight(self, duration_ms=1200):
         self.setStyleSheet(
@@ -211,16 +265,129 @@ def _on_tile_open(identifier):
     ):
         return
 
+    app_path = QtWidgets.QApplication.applicationFilePath()
+    if not app_path or not os.path.isfile(app_path):
+        substance_painter.logging.error(
+            "LJ Iterate: could not resolve Painter executable path"
+        )
+        _show_status("Could not launch a new Painter instance.", 4000)
+        return
+
+    creationflags = 0
+    if os.name == "nt":
+        creationflags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(
+            subprocess, "CREATE_NEW_PROCESS_GROUP", 0
+        )
+
     try:
-        if substance_painter.project.is_open():
-            if substance_painter.project.needs_saving():
-                substance_painter.project.save()
-            substance_painter.project.close()
-        substance_painter.project.open(target_path)
+        subprocess.Popen(
+            [app_path, target_path],
+            cwd=os.path.dirname(app_path) or None,
+            close_fds=True,
+            creationflags=creationflags,
+        )
     except Exception as exc:
         substance_painter.logging.error(
-            f"LJ Iterate: failed to open '{identifier}': {exc}"
+            f"LJ Iterate: failed to launch '{identifier}': {exc}"
         )
+        _show_status(f"Launch failed: {exc}", 5000)
+        return
+
+    _show_status(f"Launching '{identifier}' — closing this Painter…", 3000)
+    QtCore.QTimer.singleShot(_HANDOFF_CLOSE_DELAY_MS, _close_current_project)
+
+
+def _close_current_project():
+    try:
+        if (
+            substance_painter.project.is_open()
+            and substance_painter.project.needs_saving()
+        ):
+            substance_painter.project.save()
+    except Exception as exc:
+        substance_painter.logging.warning(
+            f"LJ Iterate: save before handoff quit failed: {exc}"
+        )
+
+    main_window = _main_window()
+    if main_window is not None:
+        try:
+            main_window.close()
+        except Exception:
+            pass
+
+    app = QtWidgets.QApplication.instance()
+    if app is not None:
+        QtCore.QTimer.singleShot(0, app.quit)
+
+
+def _on_tile_delete(identifier):
+    project_path = _current_project_path()
+    if project_path is None:
+        substance_painter.logging.warning(
+            "LJ Iterate: no project context to delete from"
+        )
+        return
+
+    source_dir = os.path.dirname(project_path)
+    target_spp = os.path.join(source_dir, f"{identifier}.spp")
+    if not os.path.isfile(target_spp):
+        substance_painter.logging.warning(
+            f"LJ Iterate: '{identifier}' not found at {target_spp}"
+        )
+        _rebuild_tile_grid()
+        return
+
+    main_window = _main_window()
+    reply = QtWidgets.QMessageBox.question(
+        main_window,
+        "Delete iteration",
+        f"Delete '{identifier}' from disk?\n\nThis removes:\n"
+        f"  {target_spp}\nand its iteration snapshot.\n\n"
+        "This cannot be undone.",
+        QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.Cancel,
+        QtWidgets.QMessageBox.Cancel,
+    )
+    if reply != QtWidgets.QMessageBox.Yes:
+        return
+
+    is_current = os.path.normcase(os.path.normpath(target_spp)) == os.path.normcase(
+        os.path.normpath(project_path)
+    )
+    if is_current:
+        if substance_painter.project.is_busy():
+            _show_status("Painter is busy.", 3000)
+            return
+        try:
+            substance_painter.project.close()
+        except Exception as exc:
+            substance_painter.logging.error(
+                f"LJ Iterate: close failed: {exc}"
+            )
+            _show_status("Close failed; project not deleted.", 4000)
+            return
+
+    png_path = tile_view.iteration_png_path(target_spp)
+
+    try:
+        os.remove(target_spp)
+    except Exception as exc:
+        substance_painter.logging.error(
+            f"LJ Iterate: failed to delete '{identifier}': {exc}"
+        )
+        _show_status(f"Delete failed: {exc}", 5000)
+        return
+
+    if png_path and os.path.isfile(png_path):
+        try:
+            os.remove(png_path)
+        except Exception as exc:
+            substance_painter.logging.warning(
+                f"LJ Iterate: failed to delete snapshot for '{identifier}': {exc}"
+            )
+
+    _rebuild_tile_grid()
+    _show_status(f"Deleted '{identifier}'", 3000)
 
 
 def _on_tile_capture(identifier):
@@ -253,6 +420,140 @@ def _on_tile_capture(identifier):
 
     _rebuild_tile_grid()
     _show_status(f"Re-captured '{identifier}'", 2500)
+
+
+def _refresh_name_edit():
+    edit = _widgets.get("name_edit")
+    check = _widgets.get("include_iter_check")
+    project_path = _current_project_path()
+
+    if project_path is None:
+        if _widget_valid(edit):
+            edit.setEnabled(False)
+            if not edit.hasFocus():
+                edit.setText("")
+        if _widget_valid(check):
+            check.setChecked(False)
+            check.setEnabled(False)
+            check.setToolTip("Open a project to enable this option.")
+        return
+
+    stem = os.path.splitext(os.path.basename(project_path))[0]
+    base = project_iterate.base_name(stem)
+    is_base = stem == base
+
+    if _widget_valid(edit):
+        edit.setEnabled(True)
+        if not edit.hasFocus():
+            edit.setText(base)
+
+    if _widget_valid(check):
+        if is_base:
+            check.setEnabled(True)
+            check.setToolTip(
+                "When checked, sibling _ver_N .spp files, the _iterations"
+                " folder, and its PNG snapshots are renamed too. When"
+                " unchecked, only the active project file is renamed."
+            )
+        else:
+            check.setChecked(False)
+            check.setEnabled(False)
+            check.setToolTip(
+                "Only available when the base project (no _ver_N suffix) is"
+                " open."
+            )
+
+
+def _on_rename_clicked():
+    project_path = _current_project_path()
+    edit = _widgets.get("name_edit")
+    if project_path is None:
+        _show_status("No saved project open to rename.", 3000)
+        return
+    if not _widget_valid(edit):
+        return
+
+    new_base = edit.text().strip()
+    if not project_iterate.is_valid_name(new_base):
+        _show_status("Invalid project name.", 4000)
+        return
+
+    cur_stem = os.path.splitext(os.path.basename(project_path))[0]
+    old_base = project_iterate.base_name(cur_stem)
+    if new_base == old_base:
+        return
+
+    if substance_painter.project.is_busy():
+        _show_status("Painter is busy.", 3000)
+        return
+
+    edit.clearFocus()
+
+    include_iter_check = _widgets.get("include_iter_check")
+    include_iterations = (
+        include_iter_check.isChecked()
+        if _widget_valid(include_iter_check)
+        else False
+    )
+
+    try:
+        new_current_path, ops = project_iterate.plan_family_rename(
+            project_path, new_base, include_iterations=include_iterations
+        )
+    except Exception as exc:
+        substance_painter.logging.error(f"LJ Iterate: rename plan failed: {exc}")
+        _show_status(f"Rename failed: {exc}", 5000)
+        return
+
+    if new_current_path is None:
+        return
+
+    locked = project_iterate.find_locked_paths([old for old, _ in ops])
+    if locked:
+        main_window = _main_window()
+        QtWidgets.QMessageBox.critical(
+            main_window,
+            "Rename failed — files in use",
+            "These files are currently in use by another process and cannot"
+            " be renamed:\n\n"
+            + "\n".join(f"  {p}" for p in locked)
+            + "\n\nClose whatever has them open and try again.",
+        )
+        _show_status("Rename aborted: files in use.", 4000)
+        return
+
+    try:
+        substance_painter.project.save_as(new_current_path)
+    except Exception as exc:
+        substance_painter.logging.error(f"LJ Iterate: save_as failed: {exc}")
+        _show_status(f"Save As failed: {exc}", 5000)
+        return
+
+    try:
+        project_iterate.apply_rename_ops(ops)
+    except Exception as exc:
+        substance_painter.logging.error(f"LJ Iterate: rename ops failed: {exc}")
+        _show_status(f"Rename partially failed: {exc}", 5000)
+
+    try:
+        if os.path.isfile(project_path):
+            os.remove(project_path)
+    except Exception as exc:
+        substance_painter.logging.warning(
+            f"LJ Iterate: failed to remove old .spp: {exc}"
+        )
+
+    if not include_iterations:
+        old_png = tile_view.iteration_png_path(project_path)
+        if old_png and os.path.isfile(old_png):
+            try:
+                os.remove(old_png)
+            except Exception as exc:
+                substance_painter.logging.warning(
+                    f"LJ Iterate: failed to remove old PNG: {exc}"
+                )
+
+    _show_status(f"Renamed to '{new_base}'", 3000)
 
 
 def _on_iterate():
@@ -293,6 +594,7 @@ def _on_iterate():
         return
 
     if source_pixmap is not None and not source_pixmap.isNull():
+        tile_view.save_iteration_snapshot(project_path, source_pixmap)
         tile_view.save_iteration_snapshot(new_path, source_pixmap)
 
     _rebuild_tile_grid()
@@ -345,7 +647,8 @@ def _rebuild_tile_grid():
         row = i // tiles_per_row
         col = i % tiles_per_row
         tile = _IterationTile(
-            name, pix, cell_w, cell_img_h, _on_tile_capture, _on_tile_open
+            name, pix, cell_w, cell_img_h, _on_tile_capture, _on_tile_open,
+            _on_tile_delete
         )
         grid.addWidget(tile, row, col)
         tiles[name] = tile
@@ -371,7 +674,9 @@ def _update_tile_button_states():
         if not _widget_valid(tile):
             continue
         try:
-            tile.capture_btn.setEnabled(view_visible and ident == cur_stem)
+            is_active = ident == cur_stem
+            tile.set_active(is_active)
+            tile.capture_btn.setEnabled(view_visible and is_active)
         except RuntimeError:
             pass
 
@@ -398,6 +703,7 @@ def _maybe_refresh_on_change():
     sig = _signature()
     if sig != _widgets.get("last_signature"):
         _widgets["last_signature"] = sig
+        _refresh_name_edit()
         _rebuild_tile_grid()
 
 
@@ -422,6 +728,7 @@ def _on_tiles_per_row_changed(value):
 
 def notify_project_event():
     _widgets["last_signature"] = None
+    _refresh_name_edit()
     _rebuild_tile_grid()
 
 
@@ -472,6 +779,31 @@ def build_panel():
     title.setFont(title_font)
     layout.addWidget(title)
 
+    rename_row = QtWidgets.QHBoxLayout()
+    rename_row.setSpacing(6)
+    rename_row.addWidget(QtWidgets.QLabel("Project name:"))
+    name_edit = QtWidgets.QLineEdit()
+    name_edit.setPlaceholderText("(no project open)")
+    name_edit.setToolTip(
+        "Rename this project's base name. All sibling _ver_N .spp files,"
+        " the _iterations folder, and its PNGs are renamed together."
+    )
+    name_edit.returnPressed.connect(_on_rename_clicked)
+    rename_row.addWidget(name_edit, 1)
+    rename_btn = QtWidgets.QPushButton("Rename")
+    rename_btn.clicked.connect(_on_rename_clicked)
+    rename_row.addWidget(rename_btn)
+    layout.addLayout(rename_row)
+
+    include_iter_check = QtWidgets.QCheckBox("Also rename iterations")
+    include_iter_check.setToolTip(
+        "When checked, sibling _ver_N .spp files, the _iterations folder,"
+        " and its PNG snapshots are renamed too. When unchecked, only the"
+        " active project file is renamed."
+    )
+    include_iter_check.setChecked(False)
+    layout.addWidget(include_iter_check)
+
     iterate_btn = QtWidgets.QPushButton("Iterate")
     iterate_btn.setToolTip(
         "Save the project, copy it to <base>_ver_N.spp, snapshot the 3D viewport."
@@ -513,6 +845,9 @@ def build_panel():
     _widgets["preview_container"] = preview_container
     _widgets["preview_grid"] = preview_grid
     _widgets["preview_scroll"] = preview_scroll
+    _widgets["name_edit"] = name_edit
+    _widgets["rename_btn"] = rename_btn
+    _widgets["include_iter_check"] = include_iter_check
     _widgets["last_signature"] = None
     _widgets["tiles"] = {}
 
@@ -522,6 +857,7 @@ def build_panel():
     timer.start()
     _widgets["timer"] = timer
 
+    QtCore.QTimer.singleShot(0, _refresh_name_edit)
     QtCore.QTimer.singleShot(0, _rebuild_tile_grid)
 
     return panel

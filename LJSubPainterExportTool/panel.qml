@@ -21,10 +21,23 @@ Item {
     readonly property string defaultPresetsFolder:
         "C:/Users/leone/OneDrive/Desktop/Blender Store/Substance Painter/Export Presets"
 
+    readonly property string painterUserLibrary: {
+        var docs = StandardPaths.writableLocation(StandardPaths.DocumentsLocation).toString()
+        docs = docs.replace(/^file:\/{2,3}/, "")
+        return docs + "/Adobe/Adobe Substance 3D Painter/assets/export-presets"
+    }
+
     readonly property string presetsFolderUrl:
         presetsFolderField.text
         ? "file:///" + presetsFolderField.text.replace(/\\/g, "/")
         : ""
+
+    readonly property string painterUserLibraryUrl:
+        painterUserLibrary
+        ? "file:///" + painterUserLibrary.replace(/\\/g, "/")
+        : ""
+
+    property var presetSources: ({})
 
     Component.onCompleted: {
         pathField.text = alg.settings.value(keyPath, "")
@@ -50,20 +63,51 @@ Item {
         }
     }
 
-    function refreshPresetCombo() {
-        var names = []
-        for (var i = 0; i < presetsModel.count; i++) {
-            var f = presetsModel.get(i, "fileName")
-            names.push(f.replace(/\.spexp$/i, ""))
+    function fillFilenameFromProject() {
+        if (!alg.project.isOpen()) {
+            showError("No project is open.")
+            return
         }
-        names.sort()
+        var url = alg.project.url()
+        if (!url) {
+            showError("Project has not been saved yet, so it has no name.")
+            return
+        }
+        var name = url.substring(url.lastIndexOf("/") + 1).replace(/\.spp$/i, "")
+        filenameField.text = name
+    }
+
+    function showError(message) {
+        errorDialog.text = message
+        errorDialog.open()
+    }
+
+    function refreshPresetCombo() {
+        var sources = {}
+
+        for (var i = 0; i < userLibraryModel.count; i++) {
+            var fu = userLibraryModel.get(i, "fileName")
+            var nu = fu.replace(/\.spexp$/i, "")
+            sources[nu] = painterUserLibrary
+        }
+
+        for (var j = 0; j < presetsModel.count; j++) {
+            var fc = presetsModel.get(j, "fileName")
+            var nc = fc.replace(/\.spexp$/i, "")
+            sources[nc] = presetsFolderField.text
+        }
+
+        presetSources = sources
+
+        var names = Object.keys(sources).sort()
         presetCombo.model = names
 
         var saved = alg.settings.value(keyPreset, "")
         var idx = names.indexOf(saved)
         presetCombo.currentIndex = idx >= 0 ? idx : (names.length ? 0 : -1)
 
-        alg.log.info("LJSubPainterExportTool: loaded " + names.length + " presets from " + presetsFolderUrl)
+        alg.log.info("LJSubPainterExportTool: loaded " + names.length + " presets ("
+                     + presetsModel.count + " custom + " + userLibraryModel.count + " user library)")
     }
 
     function doExport() {
@@ -72,7 +116,7 @@ Item {
             return
         }
         if (!filenameField.text) {
-            alg.log.warn("LJSubPainterExportTool: set a filename first")
+            showError("Filename is empty. Enter a name before exporting.")
             return
         }
         if (presetCombo.currentIndex < 0) {
@@ -91,8 +135,14 @@ Item {
         var filename = filenameField.text
         var rootFolder = pathField.text.replace(/\\/g, "/").replace(/\/+$/, "")
         var exportFolder = rootFolder + "/" + filename
-        var presetsFolder = presetsFolderField.text.replace(/\\/g, "/").replace(/\/+$/, "")
-        var presetPath = presetsFolder + "/" + presetCombo.currentText + ".spexp"
+        var presetName = presetCombo.currentText
+        var sourceFolder = presetSources[presetName]
+        if (!sourceFolder) {
+            alg.log.error("LJSubPainterExportTool: unknown source folder for preset → " + presetName)
+            return
+        }
+        var presetsFolder = sourceFolder.replace(/\\/g, "/").replace(/\/+$/, "")
+        var presetPath = presetsFolder + "/" + presetName + ".spexp"
 
         if (!alg.fileIO.exists(presetPath)) {
             alg.log.error("LJSubPainterExportTool: preset file not found → " + presetPath)
@@ -162,6 +212,14 @@ Item {
         onStatusChanged: if (status === FolderListModel.Ready) root.refreshPresetCombo()
     }
 
+    FolderListModel {
+        id: userLibraryModel
+        folder: root.painterUserLibraryUrl
+        nameFilters: ["*.spexp"]
+        showDirs: false
+        onStatusChanged: if (status === FolderListModel.Ready) root.refreshPresetCombo()
+    }
+
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 10
@@ -213,10 +271,21 @@ Item {
         }
 
         AlgLabel { text: "Filename (appended to each texture)" }
-        AlgTextEdit {
-            id: filenameField
+        RowLayout {
             Layout.fillWidth: true
-            onTextChanged: root.saveProjectFilename()
+            spacing: 4
+
+            AlgTextEdit {
+                id: filenameField
+                Layout.fillWidth: true
+                onTextChanged: root.saveProjectFilename()
+            }
+
+            AlgButton {
+                text: "P"
+                implicitWidth: 32
+                onClicked: root.fillFilenameFromProject()
+            }
         }
 
         AlgButton {
@@ -240,5 +309,12 @@ Item {
         title: "Choose presets folder"
         folder: presetsFolderField.text ? "file:///" + presetsFolderField.text.replace(/\\/g, "/") : ""
         onAccepted: presetsFolderField.text = root.urlToLocalPath(folder.toString())
+    }
+
+    MessageDialog {
+        id: errorDialog
+        title: "LJ Export Tool"
+        text: ""
+        buttons: MessageDialog.Ok
     }
 }
