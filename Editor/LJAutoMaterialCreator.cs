@@ -288,7 +288,7 @@ namespace LJ.EditorTools
             {
                 if (!requireAll)
                 {
-                    Debug.Log($"{LJFbxExporter.LogPrefix} Auto Material — {materialPath} already exists, skipping.");
+                    LJFbxExporter.LogVerbose($"{LJFbxExporter.LogPrefix} Auto Material — {materialPath} already exists, skipping.");
                 }
                 return true;
             }
@@ -590,7 +590,7 @@ namespace LJ.EditorTools
                 }
             }
             SaveSnapshot();
-            Debug.Log($"{LJFbxExporter.LogPrefix} Auto Material — snapshot captured {_snapshot.Count} subfolder(s) with materials in {root}");
+            LJFbxExporter.LogVerbose($"{LJFbxExporter.LogPrefix} Auto Material — snapshot captured {_snapshot.Count} subfolder(s) with materials in {root}");
         }
 
         private static void EnsureInitialized()

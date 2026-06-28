@@ -171,7 +171,7 @@ namespace LJ.EditorTools
                     _indexedFiles.Add(file);
                 }
                 _indexedFiles.Sort(StringComparer.OrdinalIgnoreCase);
-                Debug.Log($"{_logPrefix} Indexed {_indexedFiles.Count} {_extension} file(s) under {_searchPath}");
+                LJFbxExporter.LogVerbose($"{_logPrefix} Indexed {_indexedFiles.Count} {_extension} file(s) under {_searchPath}");
             }
             catch (Exception e)
             {

@@ -151,7 +151,7 @@ namespace LJ.EditorTools
                 if (_snapshot.Remove(normalized))
                 {
                     snapshotChanged = true;
-                    Debug.Log($"{LJFbxExporter.LogPrefix} Auto Prefab — snapshot dropped {normalized}");
+                    LJFbxExporter.LogVerbose($"{LJFbxExporter.LogPrefix} Auto Prefab — snapshot dropped {normalized}");
                 }
             }
 
@@ -267,7 +267,7 @@ namespace LJ.EditorTools
                 }
             }
             SaveSnapshot();
-            Debug.Log($"{LJFbxExporter.LogPrefix} Auto Prefab — snapshot captured {_snapshot.Count} fbx file(s) in {exportRoot}");
+            LJFbxExporter.LogVerbose($"{LJFbxExporter.LogPrefix} Auto Prefab — snapshot captured {_snapshot.Count} fbx file(s) in {exportRoot}");
         }
 
         private static bool TryCreatePrefab(string fbxAssetPath, string prefabRoot)

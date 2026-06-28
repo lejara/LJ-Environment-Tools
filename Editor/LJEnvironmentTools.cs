@@ -32,6 +32,15 @@ namespace LJ.EditorTools
         {
             _scroll = EditorGUILayout.BeginScrollView(_scroll);
             GUILayout.Space(8);
+
+            EditorGUI.BeginChangeCheck();
+            bool verbose = EditorGUILayout.ToggleLeft("Verbose Logging", LJFbxExporter.VerboseLogging);
+            if (EditorGUI.EndChangeCheck())
+            {
+                LJFbxExporter.VerboseLogging = verbose;
+            }
+
+            GUILayout.Space(8);
             EditorGUI.BeginChangeCheck();
             _exporterExpanded = EditorGUILayout.Foldout(_exporterExpanded, "Exportor 🏃‍♂️", true, EditorStyles.foldoutHeader);
             if (EditorGUI.EndChangeCheck())

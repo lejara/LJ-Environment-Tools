@@ -1,5 +1,9 @@
+using System;
+using System.Diagnostics;
+using System.IO;
 using UnityEditor;
 using UnityEngine;
+using Debug = UnityEngine.Debug;
 
 namespace LJ.EditorTools
 {
@@ -20,6 +24,13 @@ namespace LJ.EditorTools
             _scroll = EditorGUILayout.BeginScrollView(_scroll);
             GUILayout.Space(8);
 
+            if (GUILayout.Button("Open VS Code 💻", GUILayout.Height(28)))
+            {
+                OpenVSCode();
+            }
+
+            GUILayout.Space(8);
+
             LJBlenderFileBrowser.DrawGUI();
 
             GUILayout.Space(8);
@@ -38,6 +49,28 @@ namespace LJ.EditorTools
 
             GUILayout.Space(8);
             EditorGUILayout.EndScrollView();
+        }
+
+        private static void OpenVSCode()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            try
+            {
+                ProcessStartInfo psi = new ProcessStartInfo
+                {
+                    FileName = "cmd.exe",
+                    Arguments = "/c code .",
+                    WorkingDirectory = projectRoot,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                };
+                Process.Start(psi);
+                Debug.Log($"[LJBrowser] Launched VS Code at: {projectRoot}");
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[LJBrowser] Failed to launch VS Code: {e.Message}");
+            }
         }
     }
 }

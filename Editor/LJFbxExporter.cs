@@ -12,6 +12,19 @@ namespace LJ.EditorTools
         public const string LogPrefix = "[LJ Environment Tools]";
         public const string DefaultExportFolder = "../exports";
 
+        private const string VerboseLoggingPrefKey = "LJ.EnvTools.VerboseLogging";
+
+        public static bool VerboseLogging
+        {
+            get => EditorPrefs.GetBool(VerboseLoggingPrefKey, false);
+            set => EditorPrefs.SetBool(VerboseLoggingPrefKey, value);
+        }
+
+        public static void LogVerbose(string message)
+        {
+            if (VerboseLogging) Debug.Log(message);
+        }
+
         private const ExportFormat Format = ExportFormat.Binary;
         private const Include IncludeOption = Include.Model;
         private const ObjectPosition Position = ObjectPosition.LocalCentered;
