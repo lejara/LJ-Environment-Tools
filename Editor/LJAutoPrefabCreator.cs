@@ -14,6 +14,12 @@ namespace LJ.EditorTools
         private const string SnapshotPrefKey = "LJ.AutoPrefab.Snapshot";
         private const string OptionsExpandedPrefKey = "LJ.AutoPrefab.OptionsExpanded";
         private const string OptionStaticMeshPrefKey = "LJ.AutoPrefab.Option.StaticMesh";
+#if UNITY_2021_2_OR_NEWER
+        private const string OptionStaticShadowCasterPrefKey = "LJ.AutoPrefab.Option.StaticShadowCaster";
+#endif
+#if UNITY_2019_2_OR_NEWER
+        private const string OptionReceiveGIPrefKey = "LJ.AutoPrefab.Option.ReceiveGI";
+#endif
         private const string SectionExpandedPrefKey = "LJ.AutoPrefab.SectionExpanded";
         private const char SnapshotSeparator = '|';
 
@@ -24,6 +30,12 @@ namespace LJ.EditorTools
         private static HashSet<string> _snapshot;
         private static bool _optionsExpanded;
         private static bool _optionStaticMesh;
+#if UNITY_2021_2_OR_NEWER
+        private static bool _optionStaticShadowCaster;
+#endif
+#if UNITY_2019_2_OR_NEWER
+        private static ReceiveGI _optionReceiveGI = ReceiveGI.LightProbes;
+#endif
         private static bool _sectionExpanded = true;
 
         public static bool Enabled
@@ -181,6 +193,26 @@ namespace LJ.EditorTools
                 _optionStaticMesh = staticMesh;
                 EditorPrefs.SetBool(OptionStaticMeshPrefKey, _optionStaticMesh);
             }
+
+#if UNITY_2021_2_OR_NEWER
+            EditorGUI.BeginChangeCheck();
+            bool staticShadowCaster = EditorGUILayout.Toggle(new GUIContent("Static Shadow Caster", "Set MeshRenderer.staticShadowCaster on all child renderers."), _optionStaticShadowCaster);
+            if (EditorGUI.EndChangeCheck())
+            {
+                _optionStaticShadowCaster = staticShadowCaster;
+                EditorPrefs.SetBool(OptionStaticShadowCasterPrefKey, _optionStaticShadowCaster);
+            }
+#endif
+
+#if UNITY_2019_2_OR_NEWER
+            EditorGUI.BeginChangeCheck();
+            ReceiveGI receiveGI = (ReceiveGI)EditorGUILayout.EnumPopup(new GUIContent("Receive Global Illumination", "Set MeshRenderer.receiveGI on all child renderers."), _optionReceiveGI);
+            if (EditorGUI.EndChangeCheck())
+            {
+                _optionReceiveGI = receiveGI;
+                EditorPrefs.SetInt(OptionReceiveGIPrefKey, (int)_optionReceiveGI);
+            }
+#endif
             EditorGUI.indentLevel--;
         }
 
@@ -190,6 +222,22 @@ namespace LJ.EditorTools
             {
                 SetStaticRecursive(root, true);
             }
+
+#if UNITY_2021_2_OR_NEWER || UNITY_2019_2_OR_NEWER
+            MeshRenderer[] renderers = root.GetComponentsInChildren<MeshRenderer>(true);
+            foreach (MeshRenderer renderer in renderers)
+            {
+#if UNITY_2021_2_OR_NEWER
+                if (_optionStaticShadowCaster)
+                {
+                    renderer.staticShadowCaster = true;
+                }
+#endif
+#if UNITY_2019_2_OR_NEWER
+                renderer.receiveGI = _optionReceiveGI;
+#endif
+            }
+#endif
         }
 
         private static void SetStaticRecursive(GameObject go, bool isStatic)
@@ -317,6 +365,12 @@ namespace LJ.EditorTools
             _prefabPath = EditorPrefs.GetString(PrefabPathPrefKey, string.Empty);
             _optionsExpanded = EditorPrefs.GetBool(OptionsExpandedPrefKey, false);
             _optionStaticMesh = EditorPrefs.GetBool(OptionStaticMeshPrefKey, false);
+#if UNITY_2021_2_OR_NEWER
+            _optionStaticShadowCaster = EditorPrefs.GetBool(OptionStaticShadowCasterPrefKey, false);
+#endif
+#if UNITY_2019_2_OR_NEWER
+            _optionReceiveGI = (ReceiveGI)EditorPrefs.GetInt(OptionReceiveGIPrefKey, (int)ReceiveGI.LightProbes);
+#endif
             _sectionExpanded = EditorPrefs.GetBool(SectionExpandedPrefKey, true);
 
             _snapshot = new HashSet<string>();
