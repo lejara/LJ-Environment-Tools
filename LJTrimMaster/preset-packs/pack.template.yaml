@@ -1,0 +1,45 @@
+# Preset template — a named bundle of texture outputs.
+#
+# A preset describes a whole target, not a single file. Tick it on a trim sheet
+# and every output below is written, all sharing that sheet's trim layout.
+# Copy this file and edit; the dropdown reads `name:`, not the filename.
+#
+# Two output modes:
+#   copy  passes one map straight through
+#   pack  composites several maps into one image, a map per channel
+#
+# Per-channel keys (pack only):
+#   source:      known map name from maps.yaml (required unless constant is set)
+#   fromChannel: R | G | B | A | L   (default L = luminance)
+#   invert:      true | false        (default false)
+#   fallback:    0.0 - 1.0           used when the source map is missing
+#   constant:    0.0 - 1.0           skip the source, fill the channel flat
+#
+# A missing source warns but does not block the export - the channel falls back.
+# `source: Normal` is refused in pack mode: channel-mixing a normal map is
+# nonsense. Use mode: copy for normals.
+
+name: My Target
+
+# Default for outputs that don't set their own `format:`.
+format: PNG_RGBA
+
+outputs:
+  - mode: copy
+    outputSuffix: _BaseColor
+    source: BaseColor
+
+  - mode: pack
+    outputSuffix: _ORM
+    channels:
+      R:
+        source: AO
+        fallback: 1.0
+      G:
+        source: Roughness
+        fallback: 0.5
+      B:
+        source: Metallic
+        fallback: 0.0
+      A:
+        constant: 1.0

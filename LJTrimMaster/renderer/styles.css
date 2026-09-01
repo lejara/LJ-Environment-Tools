@@ -1,0 +1,341 @@
+/* LJ Trim Master — dark editor chrome. One stylesheet; components stay markup-only. */
+
+:root {
+  --bg: #1b1b1f;
+  --bg-raised: #232329;
+  --bg-sunken: #141417;
+  --border: #34343d;
+  --text: #e4e4ea;
+  --text-dim: #8d8d9c;
+  --accent: #5b8def;
+  --accent-dim: #3a5da8;
+  --danger: #e0574a;
+  --warn: #d8a340;
+  --radius: 5px;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; margin: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.45 "Segoe UI", system-ui, sans-serif;
+  overflow: hidden;
+  user-select: none;
+}
+
+button {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 5px 11px;
+  cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: var(--accent-dim); }
+button:disabled { opacity: 0.4; cursor: default; }
+button.is-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+input, select {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 7px;
+}
+input:focus { outline: 1px solid var(--accent); }
+
+code {
+  background: var(--bg-sunken);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 0.92em;
+}
+
+/* --- Startup ------------------------------------------------------------ */
+
+.startup {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  background: radial-gradient(1200px 600px at 50% -10%, #26262e, var(--bg));
+}
+.startup__panel { width: 520px; max-height: 88vh; overflow-y: auto; }
+.startup__header h1 { margin: 0 0 4px; font-size: 26px; letter-spacing: -0.4px; }
+.startup__header p { margin: 0 0 22px; color: var(--text-dim); }
+.startup__actions { display: flex; gap: 10px; margin-bottom: 18px; }
+.startup__actions button { flex: 1; padding: 11px; }
+.startup__error {
+  margin-bottom: 16px; padding: 9px 11px;
+  background: #3a1f1d; border: 1px solid var(--danger);
+  border-radius: var(--radius); color: #ffb3ab;
+}
+.startup__recents h2 { font-size: 12px; text-transform: uppercase; color: var(--text-dim); letter-spacing: 0.5px; }
+.startup__recents ul { list-style: none; margin: 0; padding: 0; }
+.startup__recents li { display: flex; align-items: stretch; gap: 4px; margin-bottom: 5px; }
+.startup__recent {
+  flex: 1; display: flex; flex-direction: column; gap: 2px;
+  text-align: left; padding: 8px 11px; overflow: hidden;
+}
+.startup__recent-name { font-weight: 600; }
+.startup__recent-path {
+  color: var(--text-dim); font-size: 11px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: rtl;
+}
+.startup__forget { padding: 0 9px; color: var(--text-dim); }
+.startup__empty { color: var(--text-dim); font-style: italic; }
+
+/* --- Editor layout ------------------------------------------------------ */
+
+.editor { display: flex; flex-direction: column; height: 100%; }
+.editor--empty { display: grid; place-items: center; color: var(--text-dim); }
+.editor__body { flex: 1; display: flex; min-height: 0; }
+
+/* --- Tab bar ------------------------------------------------------------ */
+
+.tabbar {
+  display: flex; align-items: stretch; gap: 2px;
+  padding: 5px 6px 0; background: var(--bg-sunken);
+  border-bottom: 1px solid var(--border); overflow-x: auto;
+}
+.tab {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 10px; cursor: pointer; white-space: nowrap;
+  background: var(--bg); color: var(--text-dim);
+  border: 1px solid var(--border); border-bottom: none;
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+.tab--active { background: var(--bg-raised); color: var(--text); }
+.tab__dirty { color: var(--warn); font-size: 16px; line-height: 0; }
+.tab__close { padding: 0 4px; background: none; border: none; color: var(--text-dim); }
+.tab__close:hover { color: var(--danger); }
+.tab__rename { width: 120px; padding: 2px 5px; }
+.tabbar__add { align-self: center; margin-left: 4px; padding: 4px 10px; }
+
+/* --- Viewport ----------------------------------------------------------- */
+
+.viewport {
+  flex: 1; display: flex; flex-direction: column; min-width: 0;
+  background: var(--bg-sunken);
+}
+.viewport--empty { display: grid; place-items: center; color: var(--text-dim); }
+.viewport__stage { flex: 1; display: grid; place-items: center; padding: 28px; min-height: 0; }
+.viewport__sheet {
+  position: relative;
+  max-width: 100%; max-height: 100%;
+  height: 100%;
+  outline: 1px solid var(--border);
+  /* Checkerboard so transparent regions of a trim read as transparent. */
+  background-color: #202024;
+  background-image:
+    linear-gradient(45deg, #191a1d 25%, transparent 25%, transparent 75%, #191a1d 75%),
+    linear-gradient(45deg, #191a1d 25%, transparent 25%, transparent 75%, #191a1d 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 10px 10px;
+}
+.viewport__caption {
+  padding: 6px 12px; text-align: center;
+  color: var(--text-dim); border-top: 1px solid var(--border);
+}
+
+.trim { position: absolute; overflow: hidden; }
+.trim__image { position: absolute; image-rendering: auto; pointer-events: none; }
+.trim--selected { outline: 1.5px solid var(--accent); outline-offset: 0; }
+.trim__missing {
+  display: grid; place-items: center; height: 100%;
+  border: 1px dashed var(--danger); color: var(--danger);
+  font-size: 11px; text-align: center; overflow: hidden;
+}
+
+/* --- Sidebar ------------------------------------------------------------ */
+
+.sidebar {
+  /* Two columns: Outliner on the left, everything acting on the selection on
+     the right. Fixed width so the Viewport takes the remaining space. */
+  width: 560px; flex-shrink: 0;
+  display: grid; grid-template-columns: 240px 320px;
+  min-height: 0;
+  background: var(--bg); border-left: 1px solid var(--border);
+}
+
+/* Columns scroll independently — a long trim list must not push the
+   Properties panel out of reach. */
+.sidebar__column {
+  display: flex; flex-direction: column;
+  min-height: 0; min-width: 0;
+  overflow-y: auto;
+}
+.sidebar__column + .sidebar__column { border-left: 1px solid var(--border); }
+.sidebar__column > .panel:last-child { border-bottom: none; }
+
+/* The Outliner owns its column, so its list fills the height instead of
+   stopping at the fixed max-height it uses when stacked. */
+.sidebar__column--outliner { overflow: hidden; }
+.sidebar__column--outliner > .panel {
+  flex: 1; display: flex; flex-direction: column; min-height: 0;
+}
+.sidebar__column--outliner .outliner { flex: 1; max-height: none; }
+
+.panel { padding: 11px 12px; border-bottom: 1px solid var(--border); }
+.panel--grow { flex-shrink: 0; }
+.panel__title {
+  display: flex; align-items: center; gap: 7px;
+  margin: 0 0 9px; font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-dim);
+}
+.panel__subtitle {
+  display: flex; align-items: center; gap: 7px;
+  margin: 0 0 5px; font-size: 11px; font-weight: 600; color: var(--text-dim);
+}
+.panel__count {
+  padding: 0 5px; background: var(--bg-raised);
+  border-radius: 8px; font-size: 10px; color: var(--text-dim);
+}
+.panel__group { margin-bottom: 13px; }
+.panel__group:last-child { margin-bottom: 0; }
+.panel__empty { margin: 0; color: var(--text-dim); font-style: italic; }
+.panel__hint { margin: 5px 0 0; font-size: 11px; color: var(--text-dim); }
+.panel__filter { width: 100%; margin-bottom: 8px; }
+.panel__warnings { margin-top: 9px; font-size: 11px; color: var(--warn); }
+.panel__warnings ul { margin: 5px 0 0; padding-left: 16px; color: var(--text-dim); }
+.panel__warnings li { margin-bottom: 3px; user-select: text; }
+
+/* --- QuantityInput ------------------------------------------------------ */
+
+.qty { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.qty--disabled { opacity: 0.45; }
+.qty__label {
+  width: 46px; flex-shrink: 0;
+  color: var(--text-dim); cursor: ew-resize;
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px;
+}
+.qty__label:hover { color: var(--accent); }
+.qty__body {
+  flex: 1; display: flex; align-items: stretch;
+  background: var(--bg-sunken); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.qty__input {
+  flex: 1; min-width: 0; border: none; background: none;
+  border-radius: 0; user-select: text;
+}
+.qty__input:focus { outline: none; }
+.qty__suffix { align-self: center; padding-right: 5px; color: var(--text-dim); font-size: 11px; }
+.qty__steppers { display: flex; flex-direction: column; border-left: 1px solid var(--border); }
+.qty__steppers button {
+  flex: 1; padding: 0 6px; font-size: 7px; line-height: 1;
+  background: none; border: none; border-radius: 0; color: var(--text-dim);
+}
+.qty__steppers button:hover:not(:disabled) { background: var(--bg-raised); color: var(--text); }
+.qty__steppers button:first-child { border-bottom: 1px solid var(--border); }
+
+/* --- Outliner ----------------------------------------------------------- */
+
+.outliner { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow-y: auto; }
+.outliner__row {
+  display: flex; align-items: center; gap: 7px;
+  padding: 4px 5px; border-radius: var(--radius);
+  border: 1px solid transparent; cursor: pointer;
+}
+.outliner__row:hover { background: var(--bg-raised); }
+.outliner__row.is-selected { background: var(--accent-dim); border-color: var(--accent); }
+.outliner__row.is-drop-target { border-top-color: var(--accent); }
+.outliner__row.is-missing .outliner__name { color: var(--danger); }
+.outliner__grip { color: var(--text-dim); cursor: grab; font-size: 11px; }
+.outliner__thumb {
+  width: 26px; height: 26px; flex-shrink: 0;
+  object-fit: cover; border-radius: 3px; background: var(--bg-sunken);
+}
+.outliner__thumb--missing { display: grid; place-items: center; color: var(--danger); }
+.outliner__name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.outliner__remove { padding: 0 5px; background: none; border: none; color: var(--text-dim); }
+.outliner__remove:hover { color: var(--danger); }
+
+/* --- Assets ------------------------------------------------------------- */
+
+.assets {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 8px; max-height: 300px; overflow-y: auto;
+}
+.assets__tile { position: relative; display: flex; flex-direction: column; gap: 2px; }
+.assets__thumb {
+  width: 100%; aspect-ratio: 1; object-fit: cover;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg-sunken);
+}
+.assets__thumb--missing { display: grid; place-items: center; color: var(--danger); }
+.assets__add {
+  position: absolute; top: 3px; left: 3px; z-index: 1;
+  width: 20px; height: 20px; padding: 0;
+  font-size: 13px; line-height: 1;
+  background: rgba(20, 20, 23, 0.82);
+}
+.assets__name { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.assets__maps { font-size: 10px; color: var(--text-dim); }
+
+/* --- Presets ------------------------------------------------------------ */
+
+.presets { list-style: none; margin: 0; padding: 0; }
+.presets__row {
+  display: flex; align-items: center; gap: 7px;
+  padding: 3px 4px; border-radius: var(--radius); cursor: pointer;
+}
+.presets__row:hover { background: var(--bg-raised); }
+.presets__name { flex-shrink: 0; }
+.presets__meta {
+  flex: 1; text-align: right; font-size: 10px; color: var(--text-dim);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* --- Toolbar ------------------------------------------------------------ */
+
+.toolbar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 11px; flex-shrink: 0;
+  background: var(--bg-sunken); border-top: 1px solid var(--border);
+}
+.toolbar__icon { padding: 4px 9px; font-size: 15px; line-height: 1; }
+.toolbar__toggle { display: flex; align-items: center; gap: 7px; }
+.toolbar__dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--border); transition: background 120ms;
+}
+.toolbar__toggle.is-on { border-color: var(--accent); color: #fff; }
+.toolbar__toggle.is-on .toolbar__dot { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+.toolbar__status {
+  flex: 1; display: flex; align-items: center; gap: 11px;
+  overflow: hidden; font-size: 11px;
+}
+.toolbar__dirty { color: var(--warn); white-space: nowrap; }
+.toolbar__message {
+  color: var(--text-dim);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.toolbar__project { color: var(--text-dim); font-size: 11px; white-space: nowrap; }
+
+/* --- Modal -------------------------------------------------------------- */
+
+.modal__backdrop {
+  position: fixed; inset: 0; z-index: 10;
+  display: grid; place-items: center;
+  background: rgba(0, 0, 0, 0.55);
+}
+.modal {
+  width: 400px; max-height: 82vh; display: flex; flex-direction: column;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 7px; box-shadow: 0 14px 44px rgba(0, 0, 0, 0.5);
+}
+.modal__header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 11px 14px; border-bottom: 1px solid var(--border);
+}
+.modal__header h2 { margin: 0; font-size: 15px; }
+.modal__close { padding: 2px 7px; background: none; border: none; color: var(--text-dim); }
+.modal__body { padding: 14px; overflow-y: auto; }
+.modal__footer {
+  display: flex; justify-content: flex-end; gap: 8px;
+  padding: 11px 14px; border-top: 1px solid var(--border);
+}

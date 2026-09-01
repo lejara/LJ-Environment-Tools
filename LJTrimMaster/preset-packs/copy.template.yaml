@@ -1,0 +1,23 @@
+# Single-output preset template — the short form.
+#
+# When a preset writes exactly one texture, the `outputs:` list can be dropped
+# and the output written straight at the top level. This file and the one below
+# it mean the same thing:
+#
+#     name: BaseColor            name: BaseColor
+#     mode: copy                 outputs:
+#     outputSuffix: _BaseColor     - mode: copy
+#     source: BaseColor              outputSuffix: _BaseColor
+#     format: PNG_RGBA               source: BaseColor
+#                                    format: PNG_RGBA
+#
+# For a preset that writes several textures, see pack.template.yaml.
+#
+# `copy` is the only mode that may use `source: Normal`. Rotated trims get their
+# encoded normal vectors rotated to match.
+
+name: BaseColor
+mode: copy
+outputSuffix: _BaseColor
+source: BaseColor
+format: PNG_RGBA

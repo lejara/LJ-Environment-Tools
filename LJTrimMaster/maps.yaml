@@ -1,0 +1,32 @@
+# Tool-wide map vocabulary. Lives next to the binary, shared by every project.
+# The first entry in knownMaps is the PRIMARY map: the only one shown in the
+# Assets panel and Outliner. Siblings are resolved by suffix at export time.
+
+# Delimiters that may separate a base name from its map suffix. List as many as
+# your dumps use — all of them are live at once:
+#
+#   suffixDelims: ["_", "-", "."]
+#     wood_Normal.png   ok
+#     wood-Normal.png   ok
+#     wood.Normal.png   ok
+#
+# How it works: every delimiter below is rewritten to a single "_" before the
+# name is split, so conventions can be mixed freely. Consequence worth knowing —
+# normalization applies to the base name too, so "old-wood_Normal.png" and
+# "old_wood-Roughness.png" group into ONE asset called "old_wood". That merging
+# is deliberate; it's what lets a messy dump read as one set of textures.
+#
+# A single string still works, so older files need no edit:
+#   suffixDelim: "_"
+
+suffixDelims:
+  - "_"
+
+knownMaps:
+  - BaseColor
+  - Roughness
+  - Metallic
+  - AO
+  - Normal
+  - Height
+  - Emissive

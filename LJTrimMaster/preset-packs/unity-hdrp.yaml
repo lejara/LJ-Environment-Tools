@@ -1,0 +1,78 @@
+# Unity HDRP — a complete Lit material.
+#
+# One preset, three textures. Tick "Unity HDRP" on a trim sheet and it emits
+# everything HDRP/Lit needs, with the same trim layout across all three.
+#
+# Unity import settings, per file:
+#   _BaseColor  sRGB ON   (it is colour)
+#   _Normal     Texture Type = Normal Map
+#   _MaskMap    sRGB OFF  (it is data — leaving sRGB on here is the single
+#                          most common cause of "my roughness looks wrong")
+
+name: Unity HDRP
+
+# Applies to every output below that doesn't override it.
+format: PNG_RGBA
+
+# Handedness of the Normal maps in image_dump. OpenGL encodes +Y upward (Unity,
+# and Substance Painter's Unity export preset); DirectX encodes it downward
+# (Unreal). This decides which way encoded vectors turn when a trim is rotated —
+# set it wrong and rotated trims light as though the sun moved.
+# Can also be set per-output if one texture came from a different pipeline.
+normalConvention: OpenGL
+
+outputs:
+  # --- Albedo ------------------------------------------------------------
+  - mode: copy
+    outputSuffix: _BaseColor
+    source: BaseColor
+
+  # --- Normal ------------------------------------------------------------
+  # Must be `copy`. Rotated trims get their encoded normal vectors rotated to
+  # match, using the normalConvention above; channel-packing a normal map is
+  # refused by the loader.
+  - mode: copy
+    outputSuffix: _Normal
+    source: Normal
+
+  # --- Mask map ----------------------------------------------------------
+  # HDRP fixes this channel order; it is not a convention you can choose:
+  #   R = Metallic
+  #   G = Ambient Occlusion
+  #   B = Detail Mask
+  #   A = Smoothness      <- NOT roughness. Smoothness = 1 - roughness.
+  - mode: pack
+    outputSuffix: _MaskMap
+    channels:
+      # Dielectric (non-metal) is the safe default when a texture set has no
+      # metallic map at all.
+      R:
+        source: Metallic
+        fromChannel: L
+        fallback: 0.0
+
+      # 1.0 = fully unoccluded, so a missing AO map leaves the surface
+      # unshadowed rather than crushing it to black.
+      G:
+        source: AO
+        fromChannel: L
+        fallback: 1.0
+
+      # Where HDRP's detail map is allowed to show through. 0.0 disables detail
+      # entirely, which is what you want unless the material uses a detail map.
+      # If it does, add DetailMask to knownMaps in maps.yaml and swap this for:
+      #     source: DetailMask
+      #     fallback: 0.0
+      B:
+        constant: 0.0
+
+      # Inverted from roughness, because HDRP wants the opposite convention to
+      # most authoring tools.
+      #
+      # NOTE the fallback is a SMOOTHNESS value (0.5 = middling gloss), used
+      # as-is when no Roughness map exists. It is not run back through `invert`.
+      A:
+        source: Roughness
+        fromChannel: L
+        invert: true
+        fallback: 0.5

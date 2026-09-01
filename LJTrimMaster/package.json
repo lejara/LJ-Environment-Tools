@@ -1,0 +1,33 @@
+{
+  "name": "lj-trim-master",
+  "version": "0.1.0",
+  "description": "Texture tool for authoring trim sheets and atlases",
+  "main": "out/main/main.js",
+  "author": "lejara",
+  "license": "UNLICENSED",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "^1.0.8",
+    "pngjs": "^7.0.0",
+    "yaml": "^2.5.1",
+    "zustand": "^4.5.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.4",
+    "@types/pngjs": "^6.0.5",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.2",
+    "electron": "^32.1.2",
+    "electron-vite": "^2.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.8"
+  }
+}
