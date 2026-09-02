@@ -283,6 +283,7 @@ LJTrimMaster/
     main.ts                          # app bootstrap, window creation, ljtm:// protocol
     preload.ts                       # contextBridge surface (the only renderer<->main door)
     ipc.ts                           # IPC channel wiring
+    menu.ts                          # AppMenu — native application menu
     fs/
       projectFs.ts                   # new/open/save project on disk
       assetScanner.ts                # AssetScanner
@@ -323,6 +324,7 @@ LJTrimMaster/
           SheetSettingsPanel.tsx
         modals/
           SettingsModal.tsx          # project defaults (default trim resolution, etc.)
+          HowToUseModal.tsx          # quick reference, opened from Help > How To Use (F1)
         controls/
           QuantityInput.tsx          # reusable value editor
 
@@ -466,3 +468,11 @@ Built on `@napi-rs/canvas` (N-API, so no `electron-rebuild`) with `pngjs` for PN
 **Failure granularity.** A failed output emits `EXPORT_FAILED` and the preset's other textures still export. A missing source map is not a failure at all — the channel falls back and the reason is reported in `EXPORT_COMPLETED.warnings`, prefixed with the file it belongs to.
 
 **Packaging.** `@napi-rs/canvas` ships a `.node` binary that must be `asarUnpack`'d when electron-builder is configured; it cannot load from inside an asar.
+
+## Application Menu
+
+`AppMenu` (`main/menu.ts`) replaces Electron's default menu with File / View / Help. **Help > How To Use** (F1) sends `MENU_COMMAND` over its own IPC channel — not the EventBus, which stays reserved for `REFRESH_*` and `EXPORT_*`; a menu click has exactly one listener, so a direct call is the right shape. `App` subscribes at the root, so the panel opens on the startup screen as well as in the editor.
+
+`HowToUseModal` reads the map vocabulary from `assetsStore` and the presets from `presetsStore` rather than hardcoding them, so it always describes the user's actual `maps.yaml` and `preset-packs/`.
+
+**There is deliberately no Edit > Undo/Redo.** Menu accelerators are consumed before the renderer sees the keystroke, so a `role: 'undo'` item bound to CmdOrCtrl+Z would swallow the shortcut and run the focused text field's undo instead of the sheet's transform undo. If an Edit menu is ever added — macOS needs one for the clipboard roles to bind — it must leave that accelerator alone.

@@ -1,4 +1,5 @@
 import type { AppEvent } from '@shared/events/AppEvent'
+import type { MenuCommand } from '@shared/types'
 
 /**
  * Typed accessor for the preload bridge. Everything the renderer sends to main
@@ -7,6 +8,7 @@ import type { AppEvent } from '@shared/events/AppEvent'
 interface LjtmBridge {
   invoke(channel: string, ...args: unknown[]): Promise<unknown>
   onBusEvent(handler: (event: AppEvent, payload: unknown) => void): () => void
+  onMenuCommand(handler: (command: MenuCommand) => void): () => void
 }
 
 declare global {

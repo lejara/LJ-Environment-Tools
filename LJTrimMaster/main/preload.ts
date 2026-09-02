@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IpcChannels } from '@shared/ipcChannels'
 import type { AppEvent } from '@shared/events/AppEvent'
+import type { MenuCommand } from '@shared/types'
 
 /**
  * The only bridge between renderer and main. contextIsolation stays on and the
@@ -16,6 +17,13 @@ const api = {
     const listener = (_e: unknown, event: AppEvent, payload: unknown): void => handler(event, payload)
     ipcRenderer.on(IpcChannels.BUS_FORWARD, listener)
     return () => ipcRenderer.off(IpcChannels.BUS_FORWARD, listener)
+  },
+
+  /** Application-menu clicks. Returns an unsubscribe. */
+  onMenuCommand: (handler: (command: MenuCommand) => void): (() => void) => {
+    const listener = (_e: unknown, command: MenuCommand): void => handler(command)
+    ipcRenderer.on(IpcChannels.MENU_COMMAND, listener)
+    return () => ipcRenderer.off(IpcChannels.MENU_COMMAND, listener)
   }
 }
 

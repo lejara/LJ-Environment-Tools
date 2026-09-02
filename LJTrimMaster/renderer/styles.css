@@ -339,3 +339,33 @@ code {
   display: flex; justify-content: flex-end; gap: 8px;
   padding: 11px 14px; border-top: 1px solid var(--border);
 }
+.modal--wide { width: 470px; }
+
+/* --- How To Use --------------------------------------------------------- */
+
+.howto__section { margin-bottom: 18px; }
+.howto__section:last-child { margin-bottom: 0; }
+.howto__lead { margin: 0 0 8px; }
+
+.howto__chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.chip {
+  padding: 2px 8px; font-size: 11px;
+  background: var(--bg-raised); border: 1px solid var(--border);
+  border-radius: 10px; color: var(--text-dim);
+}
+.chip--primary { border-color: var(--accent); color: var(--text); }
+
+.howto__presets { list-style: none; margin: 0; padding: 0; }
+.howto__presets li {
+  display: flex; align-items: baseline; gap: 9px;
+  padding: 3px 0; border-bottom: 1px solid var(--bg-raised);
+}
+.howto__presets li:last-child { border-bottom: none; }
+.howto__preset-name { flex-shrink: 0; font-weight: 600; }
+.howto__preset-files {
+  flex: 1; text-align: right; font-size: 11px; color: var(--text-dim);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.howto__steps { margin: 0; padding-left: 19px; }
+.howto__steps li { margin-bottom: 3px; }

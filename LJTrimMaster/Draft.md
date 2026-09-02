@@ -6,6 +6,12 @@ Texture tool for building trim sheets or atlases. Done by decoupling trims to it
 Then using blender and unity intergration to provide automated updates models and its materials
 This is designed to customize trim sheets after the texture has been made. Moving the trim sheet setup later rather than eailier.
 
+### Scope
+
+**The tool is renderer-agnostic.** It authors trim sheets and the UV transforms that go with them; it does not care what consumes them. Unity and Blender are the first two integrations, not the target. The same trim data is meant to drive Unreal, Godot, an offline renderer, or anything else that reads a mesh and a texture.
+
+Concretely, that means the Blender addon must transform UVs for **every** export format Blender supports, not just FBX. Someone exporting OBJ into Substance, USD into a lookdev pipeline, or glTF for the web must get the same corrected UVs as someone exporting FBX into Unity.
+
 ## Implmentation Plan
 
 Will Work in Phases
@@ -134,13 +140,13 @@ format: PNG_RGBA
 
 Per-channel keys, `pack` only:
 
-| Key | Meaning |
-|---|---|
-| `source` | known map name from `maps.yaml` (required unless `constant` is set) |
-| `fromChannel` | `R \| G \| B \| A \| L` — default `L` = luminance |
-| `invert` | `true \| false` — default `false` |
-| `fallback` | `0.0`–`1.0`, used when the source map is missing. Taken **as-is**; it is not run back through `invert` |
-| `constant` | `0.0`–`1.0`, skip the source and fill the channel flat |
+| Key           | Meaning                                                                                                |
+| ------------- | ------------------------------------------------------------------------------------------------------ |
+| `source`      | known map name from `maps.yaml` (required unless `constant` is set)                                    |
+| `fromChannel` | `R \| G \| B \| A \| L` — default `L` = luminance                                                      |
+| `invert`      | `true \| false` — default `false`                                                                      |
+| `fallback`    | `0.0`–`1.0`, used when the source map is missing. Taken **as-is**; it is not run back through `invert` |
+| `constant`    | `0.0`–`1.0`, skip the source and fill the channel flat                                                 |
 
 Two templates ship in `preset-packs/` for users to copy: `copy.template.yaml` (short form) and `pack.template.yaml` (multi-output form).
 
@@ -229,7 +235,7 @@ Per-sheet settings panel. Contains:
 - **Output resolution** (width × height in pixels). Each trim sheet has its own resolution; not shared globally.
 - **Enabled presets** — multi-select dropdown listing every preset loaded from `preset-packs/` by its `name:` field. Whatever is ticked is what the trim sheet exports on the next export event.
 
-## Blender Intergration (auto Syncer)
+## Blender Intergration
 
 Image Dump folder is source of truth.
 
@@ -238,3 +244,22 @@ There will be a ui panel to set what TrimMaster project the addon is using. When
 There be an updated list of all trims and what mesh and its material is assigned to.
 
 It will also have batch update tools. For changing what material/material goes to what trim sheet.
+
+Another QOL of life tools is simlair to LJ material import and thats to allow a single click button to import all image dump images and create a basic material of its base color and normal texture. if normals is missing thats okay just warn the user.
+
+### Export Format Coverage
+
+UV transforms are applied **at export time only** — the UVs stored in the `.blend` are never modified. Coverage differs by format because of how Blender implements each exporter:
+
+- **FBX and glTF** are Python operators, so their `execute` is wrapped. A plain `File > Export` click is transparent and catches every call path, including other addons that invoke the exporter through `bpy.ops`.
+- **OBJ, PLY, STL, USD and Alembic** are C operators and cannot be intercepted from Python. They are served by `File > Export > UV-Transformed Export`, which applies the transform, invokes the native exporter, and restores in a `finally`.
+
+Every format is supported today. What differs is whether the *native* menu entry is transparent. Because the tool is renderer-agnostic, transparency everywhere is the goal, not an extra: a habitual click on `File > Export > Wavefront (.obj)` must not silently ship untransformed UVs. The C exporters' menu entries are themselves Python and can be re-routed, which is the route to that.
+
+### Blender Workflow
+
+1. user selects an object and unwraps normally.
+2. in the uv viewport. There will be a side panel called Trimed master here. you can set the project root and multi select what object goes to what trim sheet.
+3. When the user exports weather it be normally or by using LJ exporter. Trim master will make sure the UV transform offsets are applied.
+
+optionally, if a user multi selects objects and some are assign to the same trim sheet. Allow them to change it in the UI panel. If the multi select has different assignment then what ever the user selects applies to all.

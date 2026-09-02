@@ -24,7 +24,14 @@ export const IpcChannels = {
   AUTOEXPORT_SYNC_SHEETS: 'autoExport:syncSheets',
 
   /** main -> renderer: a bridged EventBus event. */
-  BUS_FORWARD: 'bus:forward'
+  BUS_FORWARD: 'bus:forward',
+
+  /**
+   * main -> renderer: the user picked an application-menu item.
+   * Deliberately NOT on the EventBus — that is reserved for REFRESH_* and
+   * EXPORT_*, and a menu click has exactly one listener.
+   */
+  MENU_COMMAND: 'menu:command'
 } as const
 
 export type IpcChannel = (typeof IpcChannels)[keyof typeof IpcChannels]

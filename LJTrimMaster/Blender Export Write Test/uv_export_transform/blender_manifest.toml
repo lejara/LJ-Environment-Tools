@@ -1,0 +1,16 @@
+schema_version = "1.0.0"
+
+id = "uv_export_transform"
+version = "0.3.0"
+name = "UV Export Transform"
+tagline = "Transform UVs only in the exported file, never in the scene"
+maintainer = "LJTrimMaster <allen@solomediagroup.com>"
+type = "add-on"
+
+tags = ["Import-Export", "UV"]
+
+blender_version_min = "4.2.0"
+
+license = [
+  "SPDX:GPL-3.0-or-later",
+]

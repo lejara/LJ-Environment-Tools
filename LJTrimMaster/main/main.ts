@@ -3,6 +3,7 @@ import { join, dirname } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { EventBus } from '@shared/events/EventBus'
 import { registerIpc } from './ipc'
+import { AppMenu } from './menu'
 
 /**
  * App bootstrap: one window, one main-process EventBus, and the ljtm://
@@ -70,6 +71,7 @@ function createWindow(): void {
 void app.whenReady().then(() => {
   registerAssetProtocol()
   registerIpc(bus, resolveBinDir())
+  new AppMenu().install()
   createWindow()
 
   app.on('activate', () => {

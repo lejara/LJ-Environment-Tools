@@ -1,10 +1,12 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { StartupScreen } from './ui/startup/StartupScreen'
 import { EditorShell } from './ui/editor/EditorShell'
+import { HowToUseModal } from './ui/editor/modals/HowToUseModal'
 import { useProjectStore } from './state/projectStore'
 import { useAssetsStore } from './state/assetsStore'
 import { usePresetsStore } from './state/presetsStore'
 import { refreshService } from './services/refreshService'
+import { bridge } from './services/bridge'
 import type { OpenProjectResult } from '@shared/types'
 
 /**
@@ -17,6 +19,17 @@ export function App(): JSX.Element {
   const setAssets = useAssetsStore((state) => state.setFromSerialized)
   const setPresets = usePresetsStore((state) => state.setFromSerialized)
   const [error, setError] = useState<string | null>(null)
+  const [howToUseOpen, setHowToUseOpen] = useState(false)
+
+  // Help lives at the root rather than inside the editor so it also opens on
+  // the startup screen, which is exactly where a first-time user reaches for it.
+  useEffect(
+    () =>
+      bridge().onMenuCommand((command) => {
+        if (command === 'howToUse') setHowToUseOpen(true)
+      }),
+    []
+  )
 
   /** Opening a project always kicks a first refresh so the panels have data. */
   const handleOpened = useCallback(
@@ -35,6 +48,10 @@ export function App(): JSX.Element {
     [openFrom, setAssets, setPresets]
   )
 
-  if (!project) return <StartupScreen onOpened={handleOpened} />
-  return <EditorShell startupError={error} />
+  return (
+    <>
+      {project ? <EditorShell startupError={error} /> : <StartupScreen onOpened={handleOpened} />}
+      {howToUseOpen ? <HowToUseModal onClose={() => setHowToUseOpen(false)} /> : null}
+    </>
+  )
 }

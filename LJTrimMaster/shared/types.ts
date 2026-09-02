@@ -149,5 +149,8 @@ export interface RefreshResult {
   warnings: string[]
 }
 
+/** Application-menu items that the renderer has to act on. */
+export type MenuCommand = 'howToUse'
+
 /** Current project version stamp. Bump when the on-disk shape changes. */
 export const PROJECT_DATA_VERSION = '1'
