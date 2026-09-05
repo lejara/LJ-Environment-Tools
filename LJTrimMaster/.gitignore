@@ -1,3 +1,7 @@
 node_modules/
 out/
 dist/
+__pycache__/
+
+# Built extension zips.
+Blender/dist/

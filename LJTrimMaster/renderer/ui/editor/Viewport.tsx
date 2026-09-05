@@ -13,6 +13,9 @@ import type { TrimImage } from '@models/TrimImage'
  *
  * Items render in array order, so the last item paints on top — matching the
  * Outliner, which lists the same array reversed.
+ *
+ * Hidden trims are not drawn, because hiding means "not on the sheet" rather
+ * than "not in the preview" — the exporter and the Blender addon skip them too.
  */
 export function Viewport(): JSX.Element {
   const sheet = useActiveSheet()
@@ -34,7 +37,7 @@ export function Viewport(): JSX.Element {
           className="viewport__sheet"
           style={{ aspectRatio: `${sheet.resolution.width} / ${sheet.resolution.height}` }}
         >
-          {sheet.items.map((item) => (
+          {sheet.visibleItems.map((item) => (
             <TrimLayer
               key={item.id}
               item={item}

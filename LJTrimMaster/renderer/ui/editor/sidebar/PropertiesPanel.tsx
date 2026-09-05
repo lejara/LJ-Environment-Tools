@@ -1,7 +1,14 @@
 import { useCallback } from "react";
 import { QuantityInput } from "../controls/QuantityInput";
-import { useActiveSheet, useProjectStore } from "../../../state/projectStore";
-import { useSelectedImageId } from "../../../state/selectionStore";
+import {
+  useActiveSheet,
+  useProject,
+  useProjectStore,
+} from "../../../state/projectStore";
+import {
+  useSelectedImageId,
+  useSelectionStore,
+} from "../../../state/selectionStore";
 import { Crop } from "@models/Crop";
 import type { TrimImage } from "@models/TrimImage";
 
@@ -13,9 +20,12 @@ import type { TrimImage } from "@models/TrimImage";
  * Conversion happens here and nowhere else.
  */
 export function PropertiesPanel(): JSX.Element {
+  const project = useProject();
   const sheet = useActiveSheet();
   const selectedId = useSelectedImageId();
   const editImage = useProjectStore((state) => state.editImage);
+  const moveImage = useProjectStore((state) => state.moveImage);
+  const clearSelection = useSelectionStore((state) => state.clear);
 
   const image = selectedId ? (sheet?.find(selectedId) ?? null) : null;
 
@@ -38,6 +48,9 @@ export function PropertiesPanel(): JSX.Element {
 
   const { width: sheetW, height: sheetH } = sheet.resolution;
   const { transform, crop } = image;
+  const otherSheets = (project?.sheets ?? []).filter(
+    (candidate) => candidate.id !== sheet.id,
+  );
 
   return (
     <section className="panel">
@@ -128,6 +141,32 @@ export function PropertiesPanel(): JSX.Element {
           }
         />
       </div>
+
+      {otherSheets.length > 0 ? (
+        <div className="panel__group">
+          <h3 className="panel__subtitle">Move To Sheet</h3>
+          <select
+            className="panel__select"
+            value=""
+            onChange={(event) => {
+              if (!event.target.value) return;
+              if (moveImage(image.id, event.target.value)) clearSelection();
+            }}
+          >
+            <option value="">Choose a sheet…</option>
+            {otherSheets.map((target) => (
+              <option key={target.id} value={target.id}>
+                {target.name} ({target.resolution.width}×
+                {target.resolution.height})
+              </option>
+            ))}
+          </select>
+          <p className="panel__hint">
+            Keeps its pixel size and rotation. Not undoable. Blender meshes
+            linked to this trim keep working and just need a re-export.
+          </p>
+        </div>
+      ) : null}
     </section>
   );
 }

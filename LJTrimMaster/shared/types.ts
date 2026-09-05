@@ -72,6 +72,14 @@ export interface SerializedTrimImage {
   assetBaseName: string
   transform: SerializedTransform
   crop: SerializedCrop
+  /**
+   * Hidden trims behave as if they are not on the sheet at all: the exporter
+   * skips them, and the Blender addon refuses to transform UVs onto them.
+   *
+   * Optional so a project written before this existed loads unchanged — absent
+   * means visible.
+   */
+  visible?: boolean
 }
 
 export interface SerializedSheet {
@@ -90,6 +98,20 @@ export interface SerializedProjectData {
   version: string
   defaults: SerializedProjectDefaults
   sheets: SerializedSheet[]
+  /**
+   * Cached copy of the tool's `maps.yaml` vocabulary.
+   *
+   * `maps.yaml` lives next to the tool binary, not in the project, so an
+   * integration reading only `projectData.json` cannot see it — and without it
+   * the Blender addon cannot tell where a base name ends and a map suffix
+   * begins, so the two disagree about what an asset even is.
+   *
+   * The editor re-stamps this whenever a refresh loads the vocabulary, so it
+   * rides along on the normal autosave. It is therefore only as current as the
+   * last time the editor was open. Optional: a project written before this
+   * existed has none, and readers must fall back to their own defaults.
+   */
+  maps?: SerializedMapConfig
 }
 
 /** An asset as it crosses IPC — map name to absolute path on disk. */
@@ -140,11 +162,41 @@ export interface OpenProjectResult {
   data: SerializedProjectData
 }
 
+/**
+ * One object-to-trim link reported by the Blender addon.
+ *
+ * Read from `<root>/blender_links/*.json`. **Read-only and possibly stale** —
+ * the `.blend` may have been moved, renamed or deleted since it was written, so
+ * surface these as information, never as truth.
+ */
+export interface SerializedBlenderLink {
+  /** Absolute path of the `.blend` this link came from. May no longer exist. */
+  blendPath: string
+  objectName: string
+  meshName: string
+  slotIndex: number
+  materialName: string
+  trimId: string
+  /** The tool's normalized asset name — not necessarily a filename. */
+  assetBaseName: string
+  /** Null when the addon could not resolve `trimId` at the time it wrote. */
+  sheetId: string | null
+  sheetName: string | null
+  resolved: boolean
+  /** Resolvable, but hidden in the tool and therefore currently unexportable. */
+  hidden: boolean
+}
+
+/** Schema version of a `blender_links/*.json` the tool understands. */
+export const BLENDER_LINKS_SCHEMA_VERSION = 1
+
 /** Everything a refresh reloads. */
 export interface RefreshResult {
   mapConfig: SerializedMapConfig
   presets: SerializedPreset[]
   assets: SerializedAsset[]
+  /** Blender meshes linked to this project's trims. Advisory. */
+  blenderLinks: SerializedBlenderLink[]
   /** Non-fatal problems worth showing the user (duplicate preset names, bad YAML). */
   warnings: string[]
 }

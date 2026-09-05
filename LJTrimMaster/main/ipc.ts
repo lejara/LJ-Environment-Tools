@@ -14,6 +14,7 @@ import { AssetScanner } from './fs/assetScanner'
 import { PresetLoader } from './fs/presetLoader'
 import { MapConfigLoader } from './fs/mapConfigLoader'
 import { RecentProjects } from './fs/recentProjects'
+import { BlenderLinksReader } from './fs/blenderLinksReader'
 import { Exporter } from './export/exporter'
 import { AutoExporter } from './autoExport/autoExporter'
 import { Asset } from '@models/Asset'
@@ -34,6 +35,7 @@ export function registerIpc(bus: EventBus, binDir: string): void {
   const presetLoader = new PresetLoader()
   const mapConfigLoader = new MapConfigLoader()
   const recentProjects = new RecentProjects()
+  const blenderLinksReader = new BlenderLinksReader()
   const exporter = new Exporter(bus)
   const autoExporter = new AutoExporter(exporter)
 
@@ -99,12 +101,18 @@ export function registerIpc(bus: EventBus, binDir: string): void {
     const { assets, warnings: assetWarnings } = projectRoot
       ? await assetScanner.scan(ProjectFs.imageDumpPath(projectRoot), config)
       : { assets: [], warnings: [] }
+    // Advisory only: which Blender meshes are unwrapped against this project's
+    // trims, so a delete can warn first. Never blocks, never acted on.
+    const { links, warnings: linkWarnings } = projectRoot
+      ? await blenderLinksReader.read(projectRoot)
+      : { links: [], warnings: [] }
 
     const result: RefreshResult = {
       mapConfig: config.serialize(),
       presets: presets.map((preset) => preset.serialize()),
       assets: assets.map((asset) => asset.serialize()),
-      warnings: [...mapWarnings, ...presetWarnings, ...assetWarnings]
+      blenderLinks: links,
+      warnings: [...mapWarnings, ...presetWarnings, ...assetWarnings, ...linkWarnings]
     }
 
     bus.emit(AppEvent.REFRESH_COMPLETED, result)

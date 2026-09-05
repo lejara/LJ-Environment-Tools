@@ -385,7 +385,7 @@ LJTrimMaster/
 
 **Main-process services**
 
-- `AssetScanner` — walks `image_dump/`, normalizes each stem through `MapConfig`, groups files by base + known suffix. Returns `Asset[]` plus warnings for files that collide on the same base+map slot.
+- `AssetScanner` — walks `image_dump/` **and its subfolders** (depth-limited, dot-folders skipped), normalizes each stem through `MapConfig`, groups files by base + known suffix. A file in a subfolder carries the folder in its base name (`stone/wall`), so identically named textures in different folders stay separate assets and top-level names are unchanged from before subfolder support. Returns `Asset[]` plus warnings for files that collide on the same base+map slot.
 - `MapConfigLoader` / `PresetLoader` — YAML readers, run on startup and on refresh. `PresetLoader` warns on duplicate `name:` and keeps the first.
 - `RecentProjects` — user-scoped config file listing recent project paths for the Startup screen.
 - `Exporter` — for one sheet, walks each enabled preset's outputs and dispatches each to its strategy. Handles output filename: `<TrimName><outputSuffix>.<ext>`. A failed output doesn't stop the preset's other textures.
@@ -421,11 +421,11 @@ Shared pub/sub used across the app so features can hook into cross-cutting actio
 - Toolbar's refresh button calls `bus.emit(REFRESH_REQUESTED)`. Any region that needs a reload subscribes on mount; there's only one refresh entry point, but many subscribers — matches the "shared control" note in Draft.
 - `Exporter` emits export events unconditionally (both manual Build and Auto Export paths flow through it), so listeners don't need to distinguish source.
 - `AutoExporter` clears `TrimSheet.isDirty` **inline** after `Exporter.export()` returns — not via the bus. There's only one emitter and one dirty-owner in the same process; a bus round-trip would just hide the flow. Events are reserved for genuine broadcasts (multiple listeners that don't know about each other).
-- The Blender sync addon (Phase 3) subscribes to `EXPORT_COMPLETED` via the JSON hook file — that's the real broadcast case.
+- **The Blender addon does NOT subscribe to anything.** Phase 3 replaced the planned hook-file subscription: there is no IPC, no watcher and no process link between the tool and Blender. The two halves communicate only through files on disk — the addon re-reads `projectData.json` on an mtime cache, and writes the `blender_links/` sidecar the tool reads on refresh. Left here because the original note claimed otherwise.
 
 ## What's Not in v1
 
-- Blender addon (Phase 3) and Unity addon (Phase 4) are separate deliverables and not in this diagram.
+- Unity addon (Phase 4) is a separate deliverable and not in this diagram. The Blender addon (Phase 3) is built — see `Blender/README.md` and **Resolved During Phase 3** below.
 - No canvas interaction beyond preview + selection outline — selection and moves happen through the Outliner + Properties panel.
 - No undoable add/remove/reorder/rename.
 - No overlap-avoidance or grid snapping.
@@ -476,3 +476,36 @@ Built on `@napi-rs/canvas` (N-API, so no `electron-rebuild`) with `pngjs` for PN
 `HowToUseModal` reads the map vocabulary from `assetsStore` and the presets from `presetsStore` rather than hardcoding them, so it always describes the user's actual `maps.yaml` and `preset-packs/`.
 
 **There is deliberately no Edit > Undo/Redo.** Menu accelerators are consumed before the renderer sees the keystroke, so a `role: 'undo'` item bound to CmdOrCtrl+Z would swallow the shortcut and run the focused text field's undo instead of the sheet's transform undo. If an Edit menu is ever added — macOS needs one for the clipboard roles to bind — it must leave that accelerator alone.
+
+## Resolved During Phase 3
+
+The Blender addon is a separate deliverable with its own architecture doc
+(`Blender/README.md`). Only what it changed on **this** side is recorded here.
+
+### Additions to the layout
+
+```
+main/fs/
+  blenderLinksReader.ts            # BlenderLinksReader - reads blender_links/*.json
+renderer/state/
+  blenderLinksStore.ts             # trim_id -> [linked Blender objects]
+```
+
+### Decisions
+
+| Question | Decision |
+|---|---|
+| Where does `moveImage` live? | **`Project`**, not `TrimSheet` — it spans two sheets. Preserves `id` (the addon's only resolution key), recomputes the transform to preserve *pixel* geometry, marks both sheets dirty, appends to the target so it lands on top of the z-order. **Not undoable**, consistent with add/remove/reorder/rename. |
+| How does the tool learn about Blender links? | **A sidecar file the addon writes**, `<root>/blender_links/<stem>-<hash>.json`, folded into `RefreshResult` so project load and manual Refresh both pick it up. **Read-only and possibly stale** — the `.blend` may have moved or been deleted, and nothing checks. |
+| What does the tool do with them? | **Warn before deleting a trim or a sheet that objects are linked to. Warn, never block.** A native `confirm` at the two call sites (Outliner remove, TabBar sheet close) rather than a new modal component: it is a guard on a rare destructive path, not a workflow. |
+| Is `projectData.json` written atomically? | **Yes, and it has to be.** The addon reads it while the tool autosaves 800 ms after every edit. Temp-then-rename, serialized per root, with a retried rename — see Verified Fact 12 in `HANDOFF.md` for why the retry is not optional on Windows. |
+| Duplicate trim ids? | **Re-minted in `ProjectFs.migrate`.** `randomUUID` never collides in practice, but a duplicated sheet block or hand-edited JSON would, and `trim_id` is the addon's only resolution key — an ambiguous lookup means UVs transformed against the wrong sheet. The **first** occurrence keeps its id, so an existing link survives and only the copy reports a missing link. |
+
+### The one invariant that spans both sides
+
+`main/export/trimBlitter.ts` draws the pixels; `Blender/lj_trim_master/uv_transform.py`
+moves the UVs onto them. **They must agree exactly**, and a disagreement is a
+silent misalignment with no error anywhere. `Blender/tests/test_affine.py` asserts
+that agreement against an independent reimplementation of `TrimBlitter`'s canvas
+composition. **Change one and you must change the other**, and that test is how
+you find out you forgot.

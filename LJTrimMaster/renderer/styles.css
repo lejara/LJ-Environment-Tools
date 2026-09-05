@@ -101,6 +101,10 @@ code {
   display: flex; align-items: stretch; gap: 2px;
   padding: 5px 6px 0; background: var(--bg-sunken);
   border-bottom: 1px solid var(--border); overflow-x: auto;
+  /* Belt and braces with the sheet's overflow:hidden. Absolutely positioned
+     trims paint above static siblings, so without a stacking context of its own
+     the tab bar can end up underneath one and stop receiving clicks. */
+  position: relative; z-index: 1;
 }
 .tab {
   display: flex; align-items: center; gap: 6px;
@@ -126,6 +130,10 @@ code {
 .viewport__stage { flex: 1; display: grid; place-items: center; padding: 28px; min-height: 0; }
 .viewport__sheet {
   position: relative;
+  /* Clips trims that hang off the sheet. Two reasons: it matches the exporter,
+     which crops at the canvas edge, and without it an overhanging trim paints
+     over the tab bar and swallows its clicks. */
+  overflow: hidden;
   max-width: 100%; max-height: 100%;
   height: 100%;
   outline: 1px solid var(--border);
@@ -144,7 +152,18 @@ code {
 
 .trim { position: absolute; overflow: hidden; }
 .trim__image { position: absolute; image-rendering: auto; pointer-events: none; }
-.trim--selected { outline: 1.5px solid var(--accent); outline-offset: 0; }
+
+/* The selection outline traces the image's OPAQUE PIXELS, not its bounding box
+   — a cut-out texture otherwise gets a rectangle around empty space. Four
+   one-pixel drop-shadows stack into a silhouette; `filter` respects alpha,
+   which `outline` cannot. The missing-asset placeholder keeps its own dashed
+   box, so an unresolvable trim still shows something when selected. */
+.trim--selected .trim__image {
+  filter:
+    drop-shadow(1px 0 0 var(--accent)) drop-shadow(-1px 0 0 var(--accent))
+    drop-shadow(0 1px 0 var(--accent)) drop-shadow(0 -1px 0 var(--accent));
+}
+.trim--selected .trim__missing { outline: 1.5px solid var(--accent); }
 .trim__missing {
   display: grid; place-items: center; height: 100%;
   border: 1px dashed var(--danger); color: var(--danger);
@@ -273,6 +292,10 @@ code {
   font-size: 13px; line-height: 1;
   background: rgba(20, 20, 23, 0.82);
 }
+.assets__folder {
+  font-size: 10px; color: var(--text-dim);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .assets__name { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .assets__maps { font-size: 10px; color: var(--text-dim); }
 
@@ -369,3 +392,16 @@ code {
 
 .howto__steps { margin: 0; padding-left: 19px; }
 .howto__steps li { margin-bottom: 3px; }
+
+/* Move To Sheet, in the Properties panel. Resets to the placeholder after each
+   pick, because it is an action, not a stored value. */
+.panel__select { width: 100%; }
+
+/* A hidden trim is not drawn at all - it behaves as if it is not on the sheet.
+   Only the Outliner row remains, dimmed. */
+.outliner__row.is-hidden .outliner__name,
+.outliner__row.is-hidden .outliner__thumb { opacity: 0.35; }
+.outliner__visibility {
+  padding: 0 4px; background: none; border: none; color: var(--text-dim);
+}
+.outliner__visibility:hover { color: var(--text); }

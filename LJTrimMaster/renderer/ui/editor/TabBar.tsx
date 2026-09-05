@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useProjectStore, useRevision } from '../../state/projectStore'
 import { useSelectionStore } from '../../state/selectionStore'
+import { describeLinks, useBlenderLinksStore } from '../../state/blenderLinksStore'
+import type { TrimSheet } from '@models/TrimSheet'
 
 /**
  * Trim sheet tabs: add, rename (double-click), remove.
@@ -13,7 +15,18 @@ export function TabBar(): JSX.Element {
   const renameSheet = useProjectStore((state) => state.renameSheet)
   const setActiveSheet = useProjectStore((state) => state.setActiveSheet)
   const clearSelection = useSelectionStore((state) => state.clear)
+  const linksForTrims = useBlenderLinksStore((state) => state.forTrims)
   useRevision()
+
+  /**
+   * Warn before removing a sheet whose trims Blender meshes are unwrapped
+   * against. Warn, do not block — `blender_links/` is advisory and may be stale.
+   */
+  const confirmSheetRemoval = (sheet: TrimSheet): boolean => {
+    const summary = describeLinks(linksForTrims(sheet.items.map((item) => item.id)))
+    if (!summary) return true
+    return window.confirm(`Remove the sheet "${sheet.name}" and its ${sheet.items.length} trim(s)?\n\n${summary}`)
+  }
 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
@@ -71,6 +84,7 @@ export function TabBar(): JSX.Element {
                   title="Remove sheet"
                   onClick={(event) => {
                     event.stopPropagation()
+                    if (!confirmSheetRemoval(sheet)) return
                     removeSheet(sheet.id)
                     clearSelection()
                   }}

@@ -1,4 +1,5 @@
 import { Resolution } from './Resolution'
+import { Vec2 } from './Vec2'
 import { TrimImage } from './TrimImage'
 import { HistoryStack } from './HistoryStack'
 import { Snapshot } from './Snapshot'
@@ -35,9 +36,27 @@ export class TrimSheet {
     return this.items.find((item) => item.id === id)
   }
 
-  /** Adds on top of the z-order. */
-  addImage(assetBaseName: string): TrimImage {
+  /**
+   * Adds on top of the z-order.
+   *
+   * *sourceSize* is the source image's pixel dimensions. When known, the trim
+   * lands at 1:1 texel density - its default size is exactly the image's size
+   * on this sheet - which is almost always what you want and saves typing two
+   * numbers. An image larger than the sheet lands **oversized** rather than
+   * clamped: silently shrinking it would hide that the sheet is too small.
+   *
+   * Unknown size falls back to the Transform default, which is what happens if
+   * the thumbnail has not decoded yet; `projectStore.addImage` corrects it once
+   * the probe resolves.
+   */
+  addImage(assetBaseName: string, sourceSize?: { width: number; height: number }): TrimImage {
     const image = TrimImage.create(assetBaseName)
+    if (sourceSize && sourceSize.width > 0 && sourceSize.height > 0) {
+      image.transform.scale = new Vec2(
+        sourceSize.width / this.resolution.width,
+        sourceSize.height / this.resolution.height
+      )
+    }
     this.items.push(image)
     this.markDirty()
     return image
@@ -48,6 +67,24 @@ export class TrimSheet {
     if (index === -1) return
     this.items.splice(index, 1)
     this.markDirty()
+  }
+
+  /**
+   * Show or hide a trim. Marks the sheet dirty, because hiding changes what the
+   * exporter writes — it is not a preview-only convenience.
+   *
+   * Not undoable, consistent with add / remove / reorder / rename.
+   */
+  setVisible(id: string, visible: boolean): void {
+    const image = this.find(id)
+    if (!image || image.visible === visible) return
+    image.visible = visible
+    this.markDirty()
+  }
+
+  /** What the exporter draws. Hidden trims are not on the sheet. */
+  get visibleItems(): TrimImage[] {
+    return this.items.filter((item) => item.visible)
   }
 
   /** Both indices are in draw order, not Outliner display order. */

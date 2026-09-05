@@ -64,6 +64,16 @@ export class MapConfig {
     return new MapConfig([...raw.suffixDelims], [...raw.knownMaps])
   }
 
+  /** Value equality, so re-stamping an unchanged vocabulary is a no-op. */
+  static sameAs(a: MapConfig, b: MapConfig): boolean {
+    return (
+      a.suffixDelims.length === b.suffixDelims.length &&
+      a.knownMaps.length === b.knownMaps.length &&
+      a.suffixDelims.every((delim, i) => delim === b.suffixDelims[i]) &&
+      a.knownMaps.every((map, i) => map === b.knownMaps[i])
+    )
+  }
+
   static fallback(): MapConfig {
     return new MapConfig(
       ['_'],

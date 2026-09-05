@@ -5,11 +5,19 @@ import {
   useSelectedImageId,
 } from "../../../state/selectionStore";
 import { useAssetsStore } from "../../../state/assetsStore";
+import {
+  describeLinks,
+  useBlenderLinksStore,
+} from "../../../state/blenderLinksStore";
 import { assetUrl } from "../../../services/bridge";
 
 /**
  * Everything on the active sheet, as a list. Click to select, drag to reorder,
- * ✕ to remove.
+ * ◉ to hide/show, ✕ to remove.
+ *
+ * Hiding is not a preview toggle: a hidden trim is treated as absent from the
+ * sheet by the exporter and by the Blender addon, so the row stays listed but
+ * dimmed.
  *
  * LIST ORDER IS Z-ORDER: the top row draws last, i.e. on top. The underlying
  * `items` array is in draw order (index 0 = bottom), so this renders it
@@ -18,14 +26,30 @@ import { assetUrl } from "../../../services/bridge";
 export function Outliner(): JSX.Element {
   const sheet = useActiveSheet();
   const removeImage = useProjectStore((state) => state.removeImage);
+  const setImageVisible = useProjectStore((state) => state.setImageVisible);
   const reorder = useProjectStore((state) => state.reorder);
   const select = useSelectionStore((state) => state.select);
   const clear = useSelectionStore((state) => state.clear);
   const selectedId = useSelectedImageId();
   const findAsset = useAssetsStore((state) => state.find);
+  const linksForTrim = useBlenderLinksStore((state) => state.forTrim);
 
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
+
+  /**
+   * Warn before deleting a trim that Blender meshes are unwrapped against.
+   *
+   * Warn, do not block — the link list comes from `blender_links/` and may be
+   * stale, so it is never allowed to be the last word. Repair on the Blender
+   * side is manual by design: re-adding the same image mints a new trim id, so
+   * there is nothing safe to auto-heal to.
+   */
+  const confirmRemoval = (trimId: string, label: string): boolean => {
+    const summary = describeLinks(linksForTrim(trimId));
+    if (!summary) return true;
+    return window.confirm(`Remove "${label}" from this sheet?\n\n${summary}`);
+  };
 
   if (!sheet) {
     return (
@@ -69,6 +93,7 @@ export function Outliner(): JSX.Element {
                   item.id === selectedId ? "is-selected" : "",
                   overIndex === row ? "is-drop-target" : "",
                   missing ? "is-missing" : "",
+                  item.visible ? "" : "is-hidden",
                 ]
                   .filter(Boolean)
                   .join(" ")}
@@ -91,6 +116,21 @@ export function Outliner(): JSX.Element {
                 <span className="outliner__grip" title="Drag to reorder">
                   ⠿
                 </span>
+                <button
+                  type="button"
+                  className="outliner__visibility"
+                  title={
+                    item.visible
+                      ? "Hide — the exporter and the Blender addon will both skip it"
+                      : "Show"
+                  }
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setImageVisible(item.id, !item.visible);
+                  }}
+                >
+                  {item.visible ? "◉" : "◌"}
+                </button>
                 {asset?.primaryPath ? (
                   <img
                     className="outliner__thumb"
@@ -116,6 +156,7 @@ export function Outliner(): JSX.Element {
                   title="Remove from sheet"
                   onClick={(event) => {
                     event.stopPropagation();
+                    if (!confirmRemoval(item.id, item.assetBaseName)) return;
                     removeImage(item.id);
                     if (item.id === selectedId) clear();
                   }}

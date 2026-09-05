@@ -18,6 +18,18 @@ import type { RenderedSheet } from './renderedSheet'
  * When the source is a Normal map the blit routes through `renderIsolated` so
  * the encoded vectors can be rotated after the pixels are rotated but before
  * they reach the shared canvas.
+ *
+ * ## Coverage is the primary map's alpha
+ *
+ * A cut-out texture carries its shape in the alpha of its BaseColor. The other
+ * maps beside it are usually opaque rectangles — a Normal has no idea the
+ * silhouette exists — so drawing them with their own alpha would put a full
+ * rectangle of normal data behind a cut-out base colour, and the trim would
+ * light as though the removed parts were still there.
+ *
+ * So coverage for EVERY output of a trim comes from that trim's primary map,
+ * exactly as `PackStrategy` already does it. An asset with no primary map falls
+ * back to the drawn map's own alpha, which is the best information available.
  */
 export class CopyStrategy {
   private readonly blitter = new TrimBlitter()
@@ -43,7 +55,9 @@ export class CopyStrategy {
     }
 
     // Draw order is array order: index 0 is the bottom of the z-stack.
-    for (const trim of sheet.items) {
+    // Hidden trims are skipped entirely - they behave as if they are not on
+    // the sheet, which is also what the Blender addon assumes.
+    for (const trim of sheet.visibleItems) {
       const asset = assets.get(trim.assetBaseName)
       if (!asset) {
         warnings.push(`"${trim.assetBaseName}" is no longer in image_dump — skipped.`)
@@ -64,8 +78,19 @@ export class CopyStrategy {
         continue
       }
 
-      if (output.isNormalSource) {
-        this.drawRotatedNormal(ctx, image, trim, sheet, output)
+      // The primary map is the silhouette. Skipped when this output IS the
+      // primary map, since its own alpha is already the coverage.
+      const primaryPath = asset.primaryPath
+      const needsMask = Boolean(primaryPath) && mapName !== asset.primaryMap
+      const coverage = needsMask ? await loader.load(primaryPath as string) : null
+      if (needsMask && !coverage) {
+        warnings.push(
+          `Could not decode ${primaryPath} — "${trim.assetBaseName}" drew ${mapName} without its cut-out.`
+        )
+      }
+
+      if (output.isNormalSource || coverage) {
+        this.drawIsolated(ctx, image, coverage, trim, sheet, output)
       } else {
         this.blitter.drawInto(ctx, image, trim, sheet.resolution)
       }
@@ -84,16 +109,20 @@ export class CopyStrategy {
   }
 
   /**
+   * Renders one trim alone, applies the per-pixel passes it needs, and only
+   * then composites it onto the sheet.
+   *
+   * Both passes have to happen off the shared canvas. Rotating normal vectors
+   * on the sheet itself would re-rotate every trim already sitting underneath,
+   * and masking there would punch holes in them.
+   *
    * Normal maps carry direction, not colour, so rotating the pixels is only
    * half the job — the vectors they encode have to turn by the same angle.
-   *
-   * The trim is rendered alone into a bounding-box canvas, its vectors are
-   * rewritten in place, and only then is it composited. Doing the pixel pass on
-   * the sheet itself would re-rotate every trim already sitting underneath.
    */
-  private drawRotatedNormal(
+  private drawIsolated(
     ctx: SKRSContext2D,
     image: Drawable,
+    coverage: Drawable | null,
     trim: TrimImage,
     sheet: TrimSheet,
     output: PresetOutput
@@ -104,16 +133,36 @@ export class CopyStrategy {
     const { transform } = trim
     const isIdentity =
       transform.rotation % 360 === 0 && transform.scale.x >= 0 && transform.scale.y >= 0
+    const rotateVectors = output.isNormalSource && !isIdentity
 
-    if (!isIdentity) {
+    if (rotateVectors || coverage) {
       const isolatedCtx = isolated.canvas.getContext('2d')
       const data = isolatedCtx.getImageData(0, 0, isolated.canvas.width, isolated.canvas.height)
-      this.rotator.rotateInPlace(
-        data.data,
-        transform.rotation,
-        { x: transform.scale.x, y: transform.scale.y },
-        output.normalConvention
-      )
+
+      if (rotateVectors) {
+        this.rotator.rotateInPlace(
+          data.data,
+          transform.rotation,
+          { x: transform.scale.x, y: transform.scale.y },
+          output.normalConvention
+        )
+      }
+
+      if (coverage) {
+        // renderIsolated sizes its canvas from the trim and the sheet alone, so
+        // the primary map rendered the same way lands pixel-for-pixel on top of
+        // this one whatever the two source files' dimensions are.
+        const mask = this.blitter.renderIsolated(coverage, trim, sheet.resolution)
+        if (mask) {
+          const maskData = mask.canvas
+            .getContext('2d')
+            .getImageData(0, 0, mask.canvas.width, mask.canvas.height).data
+          for (let i = 3; i < data.data.length; i += 4) {
+            data.data[i] = (data.data[i] * maskData[i]) / 255
+          }
+        }
+      }
+
       isolatedCtx.putImageData(data, 0, 0)
     }
 

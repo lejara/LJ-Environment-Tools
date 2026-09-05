@@ -1,15 +1,21 @@
 import { readdir } from 'node:fs/promises'
-import { basename, extname, join } from 'node:path'
+import { extname, join, posix, relative, sep } from 'node:path'
 import { Asset } from '@models/Asset'
 import { MapConfig } from '@models/MapConfig'
 
 /**
- * Walks image_dump/ and groups files into Assets by base name + known suffix.
+ * Walks image_dump/ — top level AND subfolders — and groups files into Assets
+ * by base name + known suffix.
  *
  * `wood_BaseColor.png` and `wood_Normal.png` become one Asset "wood" with two
  * maps. A file whose suffix isn't in the map vocabulary is treated as an
  * untagged asset named after the whole filename, mapped as the primary — so a
  * plain `brick.png` still shows up and is usable.
+ *
+ * Files in a subfolder carry that folder in their base name (`stone/wall`), so
+ * two `wall_BaseColor.png` in different folders stay separate assets and only
+ * siblings in the SAME folder group together. Top-level files keep their bare
+ * name, which is what keeps projects saved before subfolder support working.
  *
  * Several delimiters can be configured at once. Rather than ranking them, each
  * stem is normalized (every configured delimiter rewritten to a single `_`)
@@ -27,29 +33,34 @@ export class AssetScanner {
     '.tiff'
   ])
 
+  /** How deep below image_dump/ to walk before giving up. */
+  private static readonly MAX_DEPTH = 8
+
   async scan(
     imageDumpPath: string,
     mapConfig: MapConfig
   ): Promise<{ assets: Asset[]; warnings: string[] }> {
-    let entries: string[]
-    try {
-      const dirents = await readdir(imageDumpPath, { withFileTypes: true })
-      entries = dirents.filter((d) => d.isFile()).map((d) => d.name)
-    } catch {
-      // No image_dump yet (fresh project, or the folder was moved) — not fatal.
-      return { assets: [], warnings: [] }
-    }
+    const files = await this.collect(imageDumpPath, 0)
 
     // baseName -> (mapName -> absolute path)
     const grouped = new Map<string, Map<string, string>>()
     const warnings: string[] = []
 
-    for (const fileName of entries) {
-      const ext = extname(fileName).toLowerCase()
+    for (const filePath of files) {
+      const ext = extname(filePath).toLowerCase()
       if (!AssetScanner.IMAGE_EXTENSIONS.has(ext)) continue
 
-      const stem = fileName.slice(0, fileName.length - ext.length)
-      const { baseName, mapName } = this.split(stem, mapConfig)
+      // Everything below image_dump/, extension stripped, in posix form so a
+      // base name reads the same on every platform.
+      const relPath = relative(imageDumpPath, filePath).split(sep).join(posix.sep)
+      const relStem = relPath.slice(0, relPath.length - ext.length)
+
+      const cut = relStem.lastIndexOf(posix.sep)
+      const folder = cut < 0 ? '' : relStem.slice(0, cut + 1)
+      const stem = cut < 0 ? relStem : relStem.slice(cut + 1)
+
+      const { baseName: stemBase, mapName } = this.split(stem, mapConfig)
+      const baseName = folder + stemBase
 
       let maps = grouped.get(baseName)
       if (!maps) {
@@ -63,12 +74,13 @@ export class AssetScanner {
       // of thing that costs an hour to work out.
       const existing = maps.get(mapName)
       if (existing) {
+        const existingRel = relative(imageDumpPath, existing).split(sep).join(posix.sep)
         warnings.push(
-          `image_dump: "${fileName}" and "${basename(existing)}" both resolve to ${baseName} / ${mapName} — using "${basename(existing)}".`
+          `image_dump: "${relPath}" and "${existingRel}" both resolve to ${baseName} / ${mapName} — using "${existingRel}".`
         )
         continue
       }
-      maps.set(mapName, join(imageDumpPath, fileName))
+      maps.set(mapName, filePath)
     }
 
     const assets: Asset[] = []
@@ -81,6 +93,35 @@ export class AssetScanner {
 
     assets.sort((a, b) => a.baseName.localeCompare(b.baseName))
     return { assets, warnings }
+  }
+
+  /**
+   * Absolute paths of every file at or below `dir`, depth-limited so a stray
+   * symlink loop or a dump pointed at something huge can't hang the scan.
+   */
+  private async collect(dir: string, depth: number): Promise<string[]> {
+    let dirents
+    try {
+      dirents = await readdir(dir, { withFileTypes: true })
+    } catch {
+      // No image_dump yet (fresh project, or the folder was moved), or a
+      // subfolder we can't read — neither is fatal.
+      return []
+    }
+
+    const files: string[] = []
+    for (const dirent of dirents) {
+      const full = join(dir, dirent.name)
+      if (dirent.isFile()) {
+        files.push(full)
+        continue
+      }
+      // Skip dot-folders — .git, .DS_Store spill, thumbnail caches.
+      if (!dirent.isDirectory() || dirent.name.startsWith('.')) continue
+      if (depth >= AssetScanner.MAX_DEPTH) continue
+      files.push(...(await this.collect(full, depth + 1)))
+    }
+    return files
   }
 
   /**

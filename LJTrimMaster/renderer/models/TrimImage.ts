@@ -15,7 +15,13 @@ export class TrimImage {
     public readonly id: string,
     public assetBaseName: string,
     public transform: Transform = new Transform(),
-    public crop: Crop = new Crop()
+    public crop: Crop = new Crop(),
+    /**
+     * Hidden trims behave as if they are **not on the sheet at all** — the
+     * exporter skips them and the Blender addon refuses to transform UVs onto
+     * them. Hiding is not just a preview convenience.
+     */
+    public visible: boolean = true
   ) {}
 
   serialize(): SerializedTrimImage {
@@ -23,7 +29,8 @@ export class TrimImage {
       id: this.id,
       assetBaseName: this.assetBaseName,
       transform: this.transform.serialize(),
-      crop: this.crop.serialize()
+      crop: this.crop.serialize(),
+      visible: this.visible
     }
   }
 
@@ -32,7 +39,10 @@ export class TrimImage {
       raw.id,
       raw.assetBaseName,
       Transform.deserialize(raw.transform),
-      Crop.deserialize(raw.crop)
+      Crop.deserialize(raw.crop),
+      // Absent means visible: a project written before hiding existed must load
+      // with everything on, not everything off.
+      raw.visible !== false
     )
   }
 

@@ -1,0 +1,18 @@
+schema_version = "1.0.0"
+
+id = "lj_trim_master"
+version = "0.1.0"
+name = "LJ Trim Master"
+tagline = "Sync material slots to trim sheets, transforming UVs on export"
+maintainer = "LJTrimMaster <allen@solomediagroup.com>"
+type = "add-on"
+
+tags = ["Import-Export", "UV", "Material"]
+
+# Developed against 5.1.2. 4.2 is the floor because that is where the extensions
+# platform lands; nothing here uses a 5.x-only API.
+blender_version_min = "4.2.0"
+
+license = [
+  "SPDX:GPL-3.0-or-later",
+]

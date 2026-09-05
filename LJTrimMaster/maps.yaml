@@ -30,3 +30,4 @@ knownMaps:
   - Normal
   - Height
   - Emissive
+  - Opacity

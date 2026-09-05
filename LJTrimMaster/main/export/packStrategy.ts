@@ -64,7 +64,9 @@ export class PackStrategy {
     alphaCtx.fillRect(0, 0, width, height)
 
     // Draw order is array order: index 0 is the bottom of the z-stack.
-    for (const trim of sheet.items) {
+    // Hidden trims are skipped entirely - they behave as if they are not on
+    // the sheet, which is also what the Blender addon assumes.
+    for (const trim of sheet.visibleItems) {
       const asset = assets.get(trim.assetBaseName)
       if (!asset) {
         warnings.push(`"${trim.assetBaseName}" is no longer in image_dump — skipped.`)

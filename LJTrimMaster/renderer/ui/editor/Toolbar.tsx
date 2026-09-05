@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useProjectStore, useRevision } from "../../state/projectStore";
 import { useAssetsStore } from "../../state/assetsStore";
 import { usePresetsStore } from "../../state/presetsStore";
+import { useBlenderLinksStore } from "../../state/blenderLinksStore";
+import { MapConfig } from "@models/MapConfig";
 import { refreshService } from "../../services/refreshService";
 import { exportService } from "../../services/exportService";
 import { autoExportService } from "../../services/autoExportService";
@@ -32,6 +34,10 @@ export function Toolbar({
   const setAssets = useAssetsStore((state) => state.setFromSerialized);
   const assets = useAssetsStore((state) => state.assets);
   const setPresets = usePresetsStore((state) => state.setFromSerialized);
+  const setBlenderLinks = useBlenderLinksStore(
+    (state) => state.setFromSerialized,
+  );
+  const setMapVocabulary = useProjectStore((state) => state.setMapVocabulary);
   const presets = usePresetsStore((state) => state.presets);
   const rev = useRevision();
 
@@ -52,12 +58,14 @@ export function Toolbar({
       const result = await refreshService.refreshAll(project.rootPath);
       setAssets(result.assets, result.mapConfig);
       setPresets(result.presets, result.warnings);
+      setBlenderLinks(result.blenderLinks);
+      setMapVocabulary(MapConfig.deserialize(result.mapConfig));
     } catch (err) {
       onStatus(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }
-  }, [project, setAssets, setPresets, onStatus]);
+  }, [project, setAssets, setPresets, setBlenderLinks, setMapVocabulary, onStatus]);
 
   /** Manual Build: re-export the active sheet regardless of its dirty flag. */
   const manualExport = useCallback(async () => {
