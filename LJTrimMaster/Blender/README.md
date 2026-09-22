@@ -48,18 +48,26 @@ Trim Master
 Project  [ .../MyProject          ] [refresh]
 [ Toggle Transform on Export ]  (o)      <- dot: green = FBX+glTF hooked
 
-Create Material From Trim Image
-   [ scrollable list of image_dump assets ]
+On-Click Material
+   [ scrollable list: trim sheets, then image_dump assets ]
    [ Create Material ]
 
 Meshes                        [ Add Mesh From Selection ]
- v [mesh] building_mesh_1  [trash]  (Needs Rexport) [!]
+[search] [                                      ]
+   [ building_mesh_1              [!] [trash] ]  <- scrolls; selected on top
+   [ building_mesh_2                  [trash] ]
+   [ floor_slab                       [trash] ]
+
+   building_mesh_1                  Needs Rexport
       [ Add Active Material Slot ]
     v [mat] wood_mat  (slot 0)  [trash]
           Trim:        [ Trim01  v ]
           Trim Image:  [ old_wood v ]
 
-v Export Hooks            (collapsed by default)
+v Debugging               (collapsed by default)
+     [ Integrity Check ]
+     [ Duplicate and Transform ]
+     v Export Hooks
 ```
 
 **Terminology.** The UI uses the user's words: **Trim** = the trim *sheet*,
@@ -70,20 +78,64 @@ Slot` adds slots. A slot with no row is not listed and is not transformed - that
 is the design, not an oversight, and it is not a silent failure because nothing
 ever claimed the slot would be transformed.
 
+**The Meshes list scrolls, and the slots are edited below it.** A `UIList` is
+the only widget in Blender that scrolls, and a UIList row cannot nest - so every
+mesh is visible in the list at once, but the slots belong to whichever row is
+active. That is the trade: a registry with fifty meshes in it no longer pushes
+everything below it off the bottom of the sidebar, and the price is that two
+meshes' slots cannot be read side by side.
+
+**Selected meshes float to the top**, and rows whose object is *not* selected in
+the viewport are dimmed - Blender's layout API has no per-row background colour,
+so the emphasis has to run the other way round. **A search overrides the
+floating**: while the search field has text the list keeps its registry order,
+because rows that reshuffle as the viewport selection changes would move out
+from under the pointer just as you went to click one. The funnel's own filter
+and alphabetical sort still work, and compose with both.
+
+**On-Click Material** builds a Principled material in one click, from either
+kind of row. A **trim sheet** row uses what the tool exported into `output/` -
+the finished, packed textures, so the material shows what the model will look
+like in-engine. An **image_dump asset** row uses the source texture you unwrapped
+against, at full resolution. Sheets are listed first, and a sheet nothing has
+been exported for is listed too, marked `not exported`, so "why is my sheet
+missing?" is never the question. **Nothing in the add-on depends on either** -
+the trim transform never inspects a material.
+
 **Refresh** (top right) does all of: re-read `projectData.json` past the mtime
-cache, rescan `image_dump/` recursively, adopt any appended mesh carrying trim
-data, rebuild the Create Material list, and re-evaluate every status.
+cache, rescan `image_dump/` recursively, rescan `output/`, adopt any appended
+mesh carrying trim data, rebuild the On-Click Material list, and re-evaluate
+every status.
+
+**Debugging** holds the things that inspect the transform rather than perform
+one, collapsed and one level down because none of it is part of the normal loop.
+
+**Integrity Check** runs a full export cycle without writing a file: it applies
+every trim transform, prints each slot's UV range before and after to the System
+Console, restores, and then verifies the restore was **bit-exact** - not merely
+close. It also fails on a leftover temporary modifier. This is the thing to run
+before trusting a large export, because a wrong restore corrupts the `.blend`
+silently. It does not exercise the exporter itself.
+
+**Duplicate and Transform** copies the active mesh and bakes its trim transform
+into the copy's UVs, so you can look at what the exported model will actually be.
+The original keeps its reference unwrap. The copy is **not tracked** - no
+registry row, and the mesh mirror it inherited is stripped - because its UVs are
+already in sheet space and a second transform would silently ruin it. Active
+object only; a mesh that is not in the Meshes list, or has no trim assigned, is
+refused with a warning and nothing is created.
 
 Workflow:
 
 1. **Set the project root.** Saved with the `.blend`.
-2. Optionally **Create Material From Trim Image**. **Nothing depends on this.**
+2. Optionally **On-Click Material**. **Nothing depends on this.**
 3. **Unwrap normally** against that one texture, 0-1.
 4. **Add the mesh, add the slot, pick a Trim then a Trim Image.**
 5. **Keep modelling.** Nothing changes - the viewport still shows the individual
    texture at full resolution.
 6. **Export.** FBX and glTF are transparent. OBJ/PLY/STL/USD/Alembic go through
-   `File > Export > Trim-Synced Export`, or the button in Export Hooks.
+   `File > Export > Trim-Synced Export`, or the menu under Debugging > Export
+   Hooks.
 
 **Transform On Export** is the master switch. Off means exports are byte-for-byte
 what Blender would normally write.
@@ -249,7 +301,9 @@ BLENDER="C:/Program Files/Blender Foundation/Blender 5.1/blender.exe"
 python tests/test_affine.py                                              # 43 checks, no Blender
 "$BLENDER" --background --factory-startup --python tests/probe_uvwarp.py        # 11 checks
 "$BLENDER" --background --factory-startup --python tests/smoke.py               # register/draw canary
-"$BLENDER" --background --factory-startup --python tests/test_sync_roundtrip.py # 97 checks
+"$BLENDER" --background --factory-startup --python tests/test_sync_roundtrip.py # 109 checks
+"$BLENDER" --background --factory-startup --python tests/test_ui_bugs.py        # 99 checks
+"$BLENDER" --background --factory-startup --python tests/test_mesh_list.py      # 30 checks
 ```
 
 **Last run: all passing.** Each exits non-zero on failure and runs in a separate
@@ -258,6 +312,12 @@ headless process, so an open session is never disturbed.
 `test_affine.py` checks the matrix against an *independent* reimplementation of
 `TrimBlitter`'s canvas composition rather than a rearrangement of the same
 algebra, so a wrong closed form shows up as a disagreement.
+
+`test_mesh_list.py` covers the Meshes list. Background Blender cannot render a
+panel, so `filter_items` is called directly with a stub standing in for the
+registered UIList - the real method, not a copy. The two behaviours it pins are
+that `flt_neworder` maps the *original* index to its new position rather than
+the reverse, and that a live search suppresses the selected-first sort.
 
 `smoke.py` is the regression test for the crash this rework fixed. Background
 Blender cannot render a panel, so instead it fingerprints the datablocks, calls

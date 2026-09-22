@@ -592,7 +592,8 @@ UV-editor copy and no second place to assign anything. **Trim** = the sheet,
 **Trim Image** = the image on it.
 
 1. Set the project root. Saved with the `.blend`.
-2. Optionally **Create Material From Trim Image**. **Nothing depends on this.**
+2. Optionally **On-Click Material** - from an exported trim sheet, or from one
+   `image_dump/` asset. **Nothing depends on this.**
 3. Unwrap normally against that one texture, 0–1.
 4. **Add Mesh From Selection**, **Add Active Material Slot**, then pick a Trim
    and a Trim Image.

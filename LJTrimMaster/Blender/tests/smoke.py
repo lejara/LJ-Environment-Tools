@@ -29,7 +29,7 @@ def check(label, condition, detail=""):
 print("Blender %s" % bpy.app.version_string)
 
 import lj_trim_master  # noqa: E402
-from lj_trim_master import assignment, export_hook, settings  # noqa: E402
+from lj_trim_master import assignment, export_hook, panel, settings  # noqa: E402
 
 lj_trim_master.register()
 check("registers", True)
@@ -97,6 +97,13 @@ try:
     assignment.slot_material_name(entry.obj, slot.slot_index)
     assignment.slot_count(entry.obj)
     assignment.read_mirror(mesh)
+    # Reached by the Debugging sub-panel and by the slot footer.
+    assignment.object_missing(entry)
+    # Reached by every visible row of the Meshes list, twice - once to dim the
+    # row and once to sort it.
+    assignment.is_selected(entry)
+    assignment.find_entry(config, entry.obj)
+    panel.missing_trim_lines(slot)
     read_paths_ran = True
 except Exception as err:
     traceback.print_exc()

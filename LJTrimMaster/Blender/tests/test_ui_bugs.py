@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The five defects found in the first real-UI session, each pinned by a test.
+"""The defects found in the first real-UI session, each pinned by a test.
 
     "C:/Program Files/Blender Foundation/Blender 5.1/blender.exe" --background --factory-startup --python tests/test_ui_bugs.py
 
@@ -17,6 +17,7 @@ intention, opposite outcome.
 Exits non-zero on failure. Separate process, so an open session is undisturbed.
 """
 
+import io
 import os
 import sys
 import tempfile
@@ -27,7 +28,9 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(_HERE))
 
 import lj_trim_master  # noqa: E402
-from lj_trim_master import assignment, export_hook, material, panel, settings  # noqa: E402
+from lj_trim_master import (  # noqa: E402
+    assignment, export_hook, material, panel, project, settings,
+)
 
 FAILURES = []
 CHECKS = [0]
@@ -110,7 +113,11 @@ def one_object(name="Cube"):
     mesh = bpy.data.meshes.new(name)
     mesh.from_pydata([(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)], [], [(0, 1, 2, 3)])
     mesh.update()
-    mesh.uv_layers.new(name="UVMap")
+    layer = mesh.uv_layers.new(name="UVMap")
+    # A real 0-1 unwrap. `uv_layers.new` leaves every UV at the origin, and a
+    # transform of a single point measures nothing.
+    for loop_uv, uv in zip(layer.data, [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]):
+        loop_uv.uv = uv
     obj = bpy.data.objects.new(name, mesh)
     bpy.context.scene.collection.objects.link(obj)
     return obj
@@ -371,6 +378,239 @@ tree.links.new(foreign.outputs['Color'], foreign_map.inputs['Color'])
 material.build_material("old_wood", maps)
 check("a foreign image node survives", foreign.name in tree.nodes)
 check("a foreign Normal Map node survives", foreign_map.name in tree.nodes)
+
+
+# ---------------------------------------------------------------------------
+print()
+print("6. A slot's material name is reflected, not warned about")
+# ---------------------------------------------------------------------------
+
+named = one_object("Renamed")
+first_material = bpy.data.materials.new("slab_mat")
+named.data.materials.append(first_material)
+named_entry = assignment.add_object(config, named)
+named_slot = assignment.add_slot(named_entry, 0)
+check("the slot records the name it was added with",
+      named_slot.material_name == "slab_mat", named_slot.material_name)
+
+first_material.name = "slab_mat_v2"
+check("a rename is reflected immediately",
+      assignment.slot_material_name(named, 0) == "slab_mat_v2",
+      assignment.slot_material_name(named, 0))
+
+named.data.materials[0] = bpy.data.materials.new("brick_mat")
+check("so is a different material dropped into the slot",
+      assignment.slot_material_name(named, 0) == "brick_mat",
+      assignment.slot_material_name(named, 0))
+check("the stored name is left alone - it is only a fallback",
+      named_slot.material_name == "slab_mat", named_slot.material_name)
+
+named.data.materials.clear()
+check("with nothing in the slot the live read is empty",
+      assignment.slot_material_name(named, 0) == "")
+check("and the stored name is what the row falls back to",
+      (assignment.slot_material_name(named, 0) or named_slot.material_name
+       or "no material") == "slab_mat")
+
+check("no draw path claims a changed material is a problem",
+      "is now" not in io.open(os.path.join(os.path.dirname(_HERE),
+                                           "lj_trim_master", "panel.py"),
+                              encoding="utf-8").read())
+
+config.meshes.remove(len(config.meshes) - 1)
+bpy.data.objects.remove(named, do_unlink=True)
+
+
+# ---------------------------------------------------------------------------
+print()
+print("7. Integrity Check (was Dry Run Check)")
+# ---------------------------------------------------------------------------
+
+check("the operator answers to its new name", hasattr(bpy.ops.ljtm, "integrity_check"))
+check("the slot the check will run on is assigned", slot.trim_id == TRIM_B, slot.trim_id)
+
+layer = obj.data.uv_layers[0]
+uvs_before = [tuple(loop.uv) for loop in layer.data]
+
+config.enabled = True
+result = bpy.ops.ljtm.integrity_check()
+check("it passes with the master switch on", 'FINISHED' in result, str(result))
+check("and left the scene UVs bit-exact",
+      [tuple(loop.uv) for loop in layer.data] == uvs_before)
+
+config.enabled = False
+result = bpy.ops.ljtm.integrity_check()
+check("with the master switch off it refuses rather than claiming success",
+      'CANCELLED' in result, str(result))
+check("and still touched nothing",
+      [tuple(loop.uv) for loop in layer.data] == uvs_before)
+config.enabled = True
+
+
+# ---------------------------------------------------------------------------
+print()
+print("8. Duplicate and Transform")
+# ---------------------------------------------------------------------------
+
+stray = one_object("Untracked")
+bpy.ops.object.select_all(action='DESELECT')
+stray.select_set(True)
+bpy.context.view_layer.objects.active = stray
+objects_before = len(bpy.data.objects)
+
+result = bpy.ops.ljtm.duplicate_transform()
+check("an unlisted mesh is refused", 'CANCELLED' in result, str(result))
+check("and nothing was created", len(bpy.data.objects) == objects_before)
+
+# A tracked object with no trim assigned is refused too, and just as quietly.
+bare = one_object("Bare")
+bare.data.materials.append(bpy.data.materials.new("bare_mat"))
+bare_entry = assignment.add_object(config, bare)
+assignment.add_slot(bare_entry, 0)
+bpy.ops.object.select_all(action='DESELECT')
+bare.select_set(True)
+bpy.context.view_layer.objects.active = bare
+objects_before = len(bpy.data.objects)
+result = bpy.ops.ljtm.duplicate_transform()
+check("a tracked mesh with no trim is refused", 'CANCELLED' in result, str(result))
+check("and nothing was created", len(bpy.data.objects) == objects_before)
+
+# The real path: the assigned object from section 2.
+bpy.ops.object.select_all(action='DESELECT')
+obj.select_set(True)
+bpy.context.view_layer.objects.active = obj
+assignment.write_mirror(obj.data, entry)
+check("the original carries a mesh mirror to inherit",
+      assignment.MIRROR_KEY in obj.data)
+
+result = bpy.ops.ljtm.duplicate_transform()
+check("it runs", 'FINISHED' in result, str(result))
+
+copy = bpy.data.objects.get(obj.name + export_hook.BAKED_SUFFIX)
+check("a copy exists, named for what it is", copy is not None)
+
+if copy is not None:
+    check("the original's UVs are untouched",
+          [tuple(loop.uv) for loop in layer.data] == uvs_before)
+
+    baked = [tuple(loop.uv) for loop in copy.data.uv_layers[0].data]
+    # The fixture trim sits at position 0.5,0.5 with scale 0.4,0.4, so its rect
+    # on the sheet is U[0.3,0.7] V[0.3,0.7] whichever way the affine flips V.
+    inside = all(0.29 < u < 0.71 and 0.29 < v < 0.71 for u, v in baked)
+    check("the copy's UVs were baked into the trim's rect", inside, str(baked))
+    check("and they actually moved", baked != uvs_before)
+
+    check("the copy has no registry row",
+          assignment.find_entry(config, copy) is None)
+    check("and no mesh mirror, so Refresh cannot adopt it either",
+          assignment.MIRROR_KEY not in copy.data)
+    check("it is stamped, so the state is visible in Object Properties",
+          copy.get(export_hook.BAKED_KEY) is True)
+    check("it is the active selection", bpy.context.view_layer.objects.active == copy)
+
+    # The real hazard this guards: a second export must not transform it again.
+    assignment.load_from_mirrors(bpy.context)
+    check("the load handler does not adopt it",
+          assignment.find_entry(config, copy) is None)
+    plan = export_hook.collect(bpy.context, None, apply_modifiers=True)
+    check("and no export path queues it", copy.name not in plan.object_names,
+          str(plan.object_names))
+
+    bpy.data.objects.remove(copy, do_unlink=True)
+
+config.meshes.remove(len(config.meshes) - 1)
+bpy.data.objects.remove(bare, do_unlink=True)
+bpy.data.objects.remove(stray, do_unlink=True)
+
+
+# ---------------------------------------------------------------------------
+print()
+print("9. On-Click Material lists exported trim sheets")
+# ---------------------------------------------------------------------------
+
+check("a sheet name is sanitized the way the tool sanitizes it",
+      project.output_base_name("Trim #1") == "Trim #1"
+      and project.output_base_name("a/b") == "a_b"
+      and project.output_base_name("Trim.") == "Trim"
+      and project.output_base_name("") == "Sheet",
+      project.output_base_name("a/b"))
+
+OUT = os.path.join(ROOT, "output")
+os.makedirs(OUT, exist_ok=True)
+for output_name in ("Test_Trim_BaseColor.png", "Test_Trim_Normal.png",
+                    "Test_Trim_MaskMap.png", "Test_Trim_B_BaseColor.png"):
+    write_png(os.path.join(OUT, output_name))
+open(os.path.join(OUT, "notes.txt"), "wb").close()
+
+settings.OUTPUTS.invalidate()
+scanned = dict((sheet.id, maps) for sheet, maps in settings.outputs(bpy.context, force=True))
+check("the first sheet's exports were found",
+      sorted(scanned.get(SHEET_ID, {})) == ["BaseColor", "MaskMap", "Normal"],
+      str(sorted(scanned.get(SHEET_ID, {}))))
+check("an unknown suffix is kept under its own name, not dropped",
+      "MaskMap" in scanned.get(SHEET_ID, {}))
+check("the longest sheet prefix wins, so Test_Trim_B keeps its own file",
+      sorted(scanned.get(SHEET_2_ID, {})) == ["BaseColor"],
+      str(sorted(scanned.get(SHEET_2_ID, {}))))
+check("a non-image in output/ is ignored",
+      not any("notes" in path for maps in scanned.values() for path in maps.values()))
+
+settings.rebuild_asset_list(bpy.context)
+rows = [(row.kind, row.name, row.map_count) for row in config.assets]
+print("   rows: %s" % rows)
+check("sheets are listed first",
+      rows[0][0] == settings.KIND_SHEET and rows[1][0] == settings.KIND_SHEET,
+      str(rows[:2]))
+check("with their exported map counts",
+      rows[0] == (settings.KIND_SHEET, "Test_Trim", 3), str(rows[0]))
+check("image_dump assets still follow",
+      any(kind == settings.KIND_ASSET and name == "old_wood" for kind, name, _ in rows),
+      str(rows))
+
+sheet_row = next(row for row in config.assets
+                 if row.kind == settings.KIND_SHEET and row.sheet_id == SHEET_ID)
+result = bpy.ops.ljtm.create_material(
+    base_name=sheet_row.name, kind=sheet_row.kind, sheet_id=sheet_row.sheet_id,
+    assign_to_active=False,
+)
+check("a sheet material builds", 'FINISHED' in result, str(result))
+sheet_material = bpy.data.materials.get("Test_Trim")
+check("named after the sheet", sheet_material is not None)
+if sheet_material is not None:
+    images = [node.image for node in sheet_material.node_tree.nodes
+              if node.bl_idname == 'ShaderNodeTexImage' and node.image]
+    sources = sorted(os.path.basename(bpy.path.abspath(image.filepath))
+                     for image in images)
+    check("wired to the sheet's own exports, not to image_dump",
+          sources == ["Test_Trim_BaseColor.png", "Test_Trim_Normal.png"], str(sources))
+
+# A sheet nothing has been exported for is listed, and says why it cannot build.
+payload = project_json()
+payload["sheets"].append({"id": "sheet-0003", "name": "Never_Built",
+                          "resolution": {"width": 256, "height": 256},
+                          "enabledPresetNames": [], "items": []})
+write_project(ROOT, payload)
+settings.OUTPUTS.invalidate()
+settings.rebuild_asset_list(bpy.context)
+unbuilt = next((row for row in config.assets if row.name == "Never_Built"), None)
+check("an unexported sheet is still listed", unbuilt is not None)
+if unbuilt is not None:
+    check("with a map count of zero, which the row renders as 'not exported'",
+          unbuilt.map_count == 0)
+    # An operator that reports {'ERROR'} raises when called from Python, which
+    # is Blender's contract, not a defect - in the UI it is a red status line.
+    refusal = ""
+    try:
+        bpy.ops.ljtm.create_material(
+            base_name=unbuilt.name, kind=unbuilt.kind, sheet_id=unbuilt.sheet_id,
+            assign_to_active=False,
+        )
+    except RuntimeError as exc:
+        refusal = str(exc)
+    check("and building from it is refused, pointing at Build",
+          "output/" in refusal and "Build" in refusal, refusal)
+    check("no empty material was left behind",
+          bpy.data.materials.get("Never_Built") is None)
 
 
 lj_trim_master.unregister()

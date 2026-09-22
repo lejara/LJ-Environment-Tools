@@ -38,12 +38,15 @@ __all__ = [
     "ProjectSnapshot",
     "ProjectCache",
     "AssetCache",
+    "OutputCache",
     "DATA_FILE",
     "IMAGE_DUMP",
+    "OUTPUT",
 ]
 
 DATA_FILE = "projectData.json"
 IMAGE_DUMP = "image_dump"
+OUTPUT = "output"
 
 #: Mirrors ``AssetScanner.MAX_DEPTH``. Depth-limited so a symlink loop or a dump
 #: pointed at something huge cannot hang the scan.
@@ -72,6 +75,7 @@ NORMAL_MAPS = ("normal", "normalgl", "normaldx", "nrm", "norm")
 #: package import-order dependent.
 CACHE = None
 ASSETS = None
+OUTPUTS = None
 
 
 class MapVocabulary:
@@ -215,6 +219,10 @@ class ProjectSnapshot:
     @property
     def image_dump(self):
         return os.path.join(self.root, IMAGE_DUMP)
+
+    @property
+    def output(self):
+        return os.path.join(self.root, OUTPUT)
 
     @classmethod
     def parse(cls, root, raw, stamp):
@@ -403,6 +411,123 @@ def scan_assets(root, vocabulary):
     return [(name, grouped[name]) for name in order]
 
 
+# ---------------------------------------------------------------------------
+# output/ scanning - the exported trim sheets
+# ---------------------------------------------------------------------------
+
+#: Mirrors ``Exporter.ILLEGAL_FILENAME_CHARS`` on the tool side. Sheet names
+#: are free text typed in the tab bar, so the tool replaces anything a
+#: filesystem would reject on the way to a filename - and this has to replace
+#: *identically*, or the files it wrote would not be found. Spaces and hyphens
+#: are legal and deliberately left alone, there as here.
+_ILLEGAL_FILENAME_CHARS = frozenset(chr(92) + '<>:"/|?*') | frozenset(
+    chr(code) for code in range(32)
+)
+
+
+def output_base_name(sheet_name):
+    """The filename stem the tool writes for a sheet. Mirrors ``fileNameFor``.
+
+    Windows also rejects a name ending in a dot or a space, which the tool
+    strips - so a sheet called ``Trim.`` writes ``Trim_BaseColor.png``, and a
+    naive match on the sheet name itself would miss every one of its files.
+    """
+    safe = "".join(
+        "_" if character in _ILLEGAL_FILENAME_CHARS else character
+        for character in sheet_name
+    )
+    return safe.rstrip(". ").strip() or "Sheet"
+
+
+def scan_sheet_outputs(root, sheets, vocabulary):
+    """What the tool has actually exported, per sheet.
+
+    Returns ``[(sheet, {map_name: absolute_path}), ...]`` in project order, with
+    an empty dict for a sheet nothing has been exported for yet.
+
+    ``output/`` is flat and its files are named ``<SheetName><suffix>.<ext>``,
+    so a file is matched to a sheet by prefix and the rest of the stem is the
+    suffix. A suffix outside the map vocabulary is **kept under its own name**
+    rather than dropped: ``_MaskMap`` is a real output of the Unity HDRP preset
+    and belongs in the map count even though nothing wires it into a material.
+
+    Two rules keep sheets with related names apart, and both are needed:
+
+    The remainder must **begin at a delimiter**, or be empty. Sheets ``Trim`` and
+    ``Trim_B`` would otherwise fight over ``Trim_BaseColor.png``, which prefixes
+    ``Trim_B`` with ``aseColor`` left over - a suffix that begins mid-word is not
+    a suffix.
+
+    Then **longest prefix wins**, for the files where both are genuinely
+    plausible: ``Trim_B_BaseColor.png`` reads as ``Trim_B`` + ``_BaseColor`` and
+    as ``Trim`` + ``_B_BaseColor``, and the longer sheet is the one that wrote
+    it.
+    """
+    folder = os.path.join(root or "", OUTPUT)
+    try:
+        names = sorted(os.listdir(folder))
+    except OSError:
+        names = []
+
+    delimiters = tuple(vocabulary.suffix_delims) or ("_",)
+    bases = sorted(
+        ((output_base_name(sheet.name), sheet) for sheet in sheets),
+        key=lambda pair: len(pair[0]),
+        reverse=True,
+    )
+    found = {sheet.id: {} for sheet in sheets}
+
+    for name in names:
+        stem, extension = os.path.splitext(name)
+        if extension.lower() not in IMAGE_EXTENSIONS:
+            continue
+        for base, sheet in bases:
+            if not stem.startswith(base):
+                continue
+            suffix = stem[len(base):]
+            if suffix and not suffix.startswith(delimiters):
+                continue
+            suffix = suffix.lstrip("".join(delimiters))
+            # An empty suffix means a preset that writes one unsuffixed file;
+            # it can only be the primary map.
+            map_name = vocabulary.canonical(suffix) or suffix if suffix \
+                else vocabulary.known_maps[0]
+            found[sheet.id].setdefault(map_name, os.path.join(folder, name))
+            break
+
+    return [(sheet, found[sheet.id]) for sheet in sheets]
+
+
+class OutputCache:
+    """The last ``output/`` scan.
+
+    Separate from :class:`AssetCache` because the two answer different
+    questions and change at different times - ``output/`` is rewritten by every
+    Build, ``image_dump/`` only when the user adds textures. Same policy though:
+    scanned on Refresh, not polled, because a redraw must not touch the disk.
+    """
+
+    def __init__(self):
+        self._key = None
+        self._outputs = []
+
+    def get(self, snapshot, force=False):
+        if snapshot is None:
+            self._key = None
+            self._outputs = []
+            return []
+        key = (snapshot.root, snapshot.stamp,
+               tuple(sheet.id for sheet in snapshot.sheets),
+               tuple(sheet.name for sheet in snapshot.sheets))
+        if force or key != self._key:
+            self._outputs = scan_sheet_outputs(snapshot.root, snapshot.sheets, snapshot.maps)
+            self._key = key
+        return self._outputs
+
+    def invalidate(self):
+        self._key = None
+
+
 class AssetCache:
     """The last ``image_dump/`` scan.
 
@@ -476,3 +601,4 @@ def _resolution(raw, default):
 
 CACHE = ProjectCache()
 ASSETS = AssetCache()
+OUTPUTS = OutputCache()

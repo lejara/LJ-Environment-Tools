@@ -358,7 +358,9 @@ def collect(context, report=None, apply_modifiers=None, selection_only=False):
             if mask is None:
                 problem(
                     "'%s' slot %d ('%s') has no faces - nothing to transform"
-                    % (obj.name, record.slot_index, record.material_name or "no material")
+                    % (obj.name, record.slot_index,
+                       assignment.slot_material_name(obj, record.slot_index)
+                       or record.material_name or "no material")
                 )
                 continue
 
@@ -849,9 +851,18 @@ def file_export_menu(self, _context):
 # Diagnostics
 # ---------------------------------------------------------------------------
 
-class LJTM_OT_dry_run(Operator):
-    bl_idname = "ljtm.dry_run"
-    bl_label = "Dry Run Check"
+class LJTM_OT_integrity_check(Operator):
+    """Prove the export cycle is safe, without writing a file.
+
+    The add-on's whole premise is that it transforms UVs for the duration of an
+    export and then puts them back. If the restore is ever wrong the .blend is
+    quietly corrupted and nothing says so until much later, so this runs the
+    real cycle - the same context manager an export uses, not a parallel code
+    path - and then checks the restore was **bit-exact**, not merely close.
+    """
+
+    bl_idname = "ljtm.integrity_check"
+    bl_label = "Integrity Check"
     bl_description = (
         "Apply every trim transform, measure it, restore - and verify the "
         "restore was bit-exact. Writes no file"
@@ -867,6 +878,19 @@ class LJTM_OT_dry_run(Operator):
             for message in warnings:
                 self.report({'WARNING'}, message)
             self.report({'ERROR'}, "Nothing to transform")
+            return {'CANCELLED'}
+
+        # With the master switch off `uv_transform_applied` yields None and
+        # nothing is applied - so every "restored" check below would pass
+        # vacuously and the operator would report success for a no-op. Say what
+        # actually happened instead.
+        if not settings.is_enabled(context):
+            self.report(
+                {'WARNING'},
+                "Transform on Export is OFF - nothing was applied, so nothing "
+                "was checked. %d slot(s) would have been transformed"
+                % plan.count,
+            )
             return {'CANCELLED'}
 
         for target in plan.direct + plan.evaluated:
@@ -924,6 +948,149 @@ class LJTM_OT_dry_run(Operator):
             {'INFO'},
             "%d slot(s) transformed and fully reverted - ranges in the System Console"
             % plan.count,
+        )
+        return {'FINISHED'}
+
+
+#: Suffix on the duplicate, and on its mesh. Deliberately not a `.001` sibling:
+#: the copy is a different KIND of thing from the original, not another one of
+#: it, and the name is the only place that shows in the Outliner.
+BAKED_SUFFIX = "_trimmed"
+
+#: Stamped on the duplicate so the state is visible in Object Properties >
+#: Custom Properties. Nothing reads it - it is a note to the user, six months
+#: later, about why this object's UVs look wrong in the UV editor.
+BAKED_KEY = "lj_trim_master_baked"
+
+
+class LJTM_OT_duplicate_transform(Operator):
+    """A copy of the active mesh with its trim transform baked into the UVs.
+
+    Everything else in this add-on is careful never to touch the scene's UVs -
+    the unwrap in source-image space *is* the reference, and the sheet-space
+    version exists only inside an exported file. This is the one deliberate
+    exception, and it is why it produces a **copy**: the original keeps its
+    reference unwrap, and the copy is a disposable thing to look at.
+
+    The copy is **not tracked**. Its UVs are already in sheet space, so a row in
+    the Meshes list would mean the next export transformed it a second time -
+    silently, and wrongly. Both routes into the registry are closed: it gets no
+    row, and the mesh mirror it inherited from the original is stripped, so
+    Refresh and the load handler cannot adopt it either.
+    """
+
+    bl_idname = "ljtm.duplicate_transform"
+    bl_label = "Duplicate and Transform"
+    bl_description = (
+        "Duplicate the active mesh and bake its trim transform into the copy's "
+        "UVs, to see what the exported model will look like. The original is "
+        "untouched and the copy is not tracked. Active object only"
+    )
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return obj is not None and obj.type == 'MESH' and obj.mode != 'EDIT'
+
+    def _nothing_happened(self, reason):
+        self.report({'WARNING'}, reason + " - nothing happened")
+        return {'CANCELLED'}
+
+    def execute(self, context):
+        obj = context.active_object
+        config = settings.settings(context)
+        entry = assignment.find_entry(config, obj) if config is not None else None
+        if entry is None:
+            return self._nothing_happened(
+                "'%s' is not in the Meshes list. Select it and press Add Mesh "
+                "From Selection first" % obj.name
+            )
+
+        records = [slot for slot in entry.slots if slot.trim_id]
+        if not records:
+            return self._nothing_happened("'%s' has no trim assigned" % obj.name)
+
+        snapshot = settings.snapshot(context, force=True)
+        if snapshot is None:
+            return self._nothing_happened("projectData.json could not be read")
+
+        source_layer = target_uv_layer(obj.data)
+        if source_layer is None:
+            return self._nothing_happened("'%s' has no UV map" % obj.name)
+
+        # Resolve everything against the ORIGINAL first, so a run that can do
+        # nothing leaves no half-baked duplicate behind to clean up.
+        resolved = []
+        problems = []
+        for record in records:
+            item = snapshot.find_trim(record.trim_id)
+            if item is None:
+                problems.append(
+                    "slot %d: missing trim link (was: %s)"
+                    % (record.slot_index,
+                       record.asset_base_name or record.trim_id[:8])
+                )
+                continue
+            if not item.visible:
+                problems.append(
+                    "slot %d: '%s' is hidden in the tool, so it is not on '%s'"
+                    % (record.slot_index, item.label, item.sheet.name)
+                )
+                continue
+            mask = loop_slot_mask(obj.data, record.slot_index)
+            if mask is None:
+                problems.append("slot %d has no faces" % record.slot_index)
+                continue
+            matrix = TrimAffine.from_trim(
+                item.position, item.scale, item.rotation, item.crop,
+                item.sheet.resolution,
+            )
+            resolved.append((record, item, matrix, mask))
+
+        for message in problems:
+            self.report({'WARNING'}, "'%s' %s" % (obj.name, message))
+        if not resolved:
+            return self._nothing_happened(
+                "no slot on '%s' resolves to a trim" % obj.name
+            )
+
+        copy = obj.copy()
+        copy.data = obj.data.copy()
+        copy.name = obj.name + BAKED_SUFFIX
+        copy.data.name = obj.data.name + BAKED_SUFFIX
+        copy[BAKED_KEY] = True
+
+        # Untrack. The mesh mirror rode along with `data.copy()`, and it is what
+        # Refresh and the load handler adopt from.
+        if assignment.MIRROR_KEY in copy.data:
+            del copy.data[assignment.MIRROR_KEY]
+
+        for collection in obj.users_collection:
+            collection.objects.link(copy)
+        if not copy.users_collection:
+            context.scene.collection.objects.link(copy)
+
+        # The masks came from the original, which is valid: `data.copy()` copies
+        # the topology and the material indices, so loop N is the same face's
+        # loop in both.
+        layer = target_uv_layer(copy.data)
+        _apply_direct(layer, [
+            DirectTarget(copy, copy.data, layer, record.slot_index, matrix, mask,
+                         record, item)
+            for record, item, matrix, mask in resolved
+        ])
+        _flush({copy.data}, {copy})
+
+        for selected in context.selected_objects:
+            selected.select_set(False)
+        copy.select_set(True)
+        context.view_layer.objects.active = copy
+
+        self.report(
+            {'INFO'},
+            "'%s': %d slot(s) baked. Not tracked - it will export as-is"
+            % (copy.name, len(resolved)),
         )
         return {'FINISHED'}
 
@@ -997,7 +1164,8 @@ def _fmt(bounds):
 classes = (
     LJTM_OT_export,
     LJTM_MT_export,
-    LJTM_OT_dry_run,
+    LJTM_OT_integrity_check,
+    LJTM_OT_duplicate_transform,
     LJTM_OT_attach_hooks,
     LJTM_OT_purge_modifiers,
 )

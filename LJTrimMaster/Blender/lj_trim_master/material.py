@@ -11,10 +11,24 @@ each downstream integration handles its own materials, and the viewport keeps
 showing the individual texture at full resolution while modelling rather than a
 small corner of a packed sheet.
 
-The list shows the **normalized asset name**, which is what the tool calls the
-asset - ``old-wood_Normal.png`` and ``old_wood-AO.png`` collapse to one asset
-``old_wood``. That name may match no file on disk exactly, so the UI must never
-present it as a filename.
+The list offers two kinds of row.
+
+**Trim sheets**, built from what the tool has exported into ``output/``. That is
+the finished thing: the material shows what the model will actually look like
+in-engine, packed sheet and all. Only useful after a Build, and a sheet with
+nothing exported yet says so on its row rather than going missing.
+
+**image_dump assets**, built from the source textures. That is what you unwrap
+against - full resolution, one texture, no sheet - and it is what you want while
+modelling. This is the reason the sheet material is not required anywhere: the
+viewport keeps showing the individual texture, and the trim transform never
+inspects a material to work out what to do.
+
+Either way the name shown is what the **tool** calls the thing, not a filename.
+An asset's name is normalized - ``old-wood_Normal.png`` and ``old_wood-AO.png``
+collapse to one asset ``old_wood`` - and a sheet's name is sanitized on its way
+to disk, so ``Trim #1`` writes ``Trim _1_BaseColor.png``. Neither may ever be
+presented as a path.
 """
 
 import os
@@ -164,33 +178,46 @@ def build_material(base_name, maps):
 
 
 class LJTM_UL_assets(UIList):
-    """The scrollable image_dump list.
+    """The scrollable On-Click Material list: trim sheets, then image_dump.
 
     A UIList rather than a column of buttons because it is the only widget in
-    Blender that actually scrolls - a per-asset button grows without limit and
+    Blender that actually scrolls - a per-row button grows without limit and
     would push the Meshes tree off the bottom of a large dump.
+
+    The two kinds are told apart by icon, and a sheet that has never been
+    exported says so where its map count would be. Listing it anyway is the
+    point: "not exported" is an answer, an absent row is a mystery.
     """
 
     def draw_item(self, _context, layout, _data, item, _icon, _active, _prop):
+        sheet = item.kind == settings.KIND_SHEET
         row = layout.row(align=True)
-        row.label(text=item.name, icon='IMAGE_DATA')
+        row.label(text=item.name, icon='TEXTURE' if sheet else 'IMAGE_DATA')
         sub = row.row()
         sub.alignment = 'RIGHT'
-        sub.label(text="%d map%s" % (item.map_count, "" if item.map_count == 1 else "s"))
+        if sheet and not item.map_count:
+            sub.label(text="not exported")
+        else:
+            sub.label(text="%d map%s" % (item.map_count,
+                                         "" if item.map_count == 1 else "s"))
 
 
 class LJTM_OT_create_material(Operator):
     bl_idname = "ljtm.create_material"
     bl_label = "Create Material"
     bl_description = (
-        "Build a Principled material from the selected image_dump asset - base "
-        "colour, plus normal if a sibling exists. Purely a convenience: nothing "
-        "about trim syncing depends on the material"
+        "Build a Principled material from the selected row - an exported trim "
+        "sheet, or one image_dump asset. Base colour, plus normal if one "
+        "exists. Purely a convenience: nothing about trim syncing depends on "
+        "the material"
     )
     bl_options = {'REGISTER', 'UNDO'}
 
-    #: Resolved by NAME, not by list position, so the two lists cannot drift.
+    #: Resolved by NAME for an asset and by ID for a sheet, never by list
+    #: position, so the panel's list and this operator cannot drift.
     base_name: StringProperty(default="", options={'SKIP_SAVE'})
+    kind: StringProperty(default=settings.KIND_ASSET, options={'SKIP_SAVE'})
+    sheet_id: StringProperty(default="", options={'SKIP_SAVE'})
     assign_to_active: BoolProperty(
         name="Add To Active Object",
         description="Append the material as a new slot on the active mesh",
@@ -202,17 +229,41 @@ class LJTM_OT_create_material(Operator):
     def poll(cls, context):
         return bool(settings.project_root(context))
 
-    def execute(self, context):
-        maps = None
-        for name, found in settings.assets(context):
-            if name == self.base_name:
-                maps = found
-                break
-        if maps is None:
-            self.report({'ERROR'}, "Pick an image first, or press Refresh")
-            return {'CANCELLED'}
+    def _sheet_maps(self, context):
+        """``(display_name, maps)`` for the picked sheet, or ``(name, None)``.
 
-        material, warnings = build_material(self.base_name, maps)
+        A sheet with an empty map dict is not an error worth a traceback: it
+        just has not been exported yet, and the message has to say that rather
+        than "pick an image first", which would send the user hunting in the
+        wrong place.
+        """
+        for sheet, maps in settings.outputs(context):
+            if sheet.id == self.sheet_id:
+                return (sheet.name, maps or None)
+        return (self.base_name, None)
+
+    def execute(self, context):
+        if self.kind == settings.KIND_SHEET:
+            name, maps = self._sheet_maps(context)
+            if maps is None:
+                self.report(
+                    {'ERROR'},
+                    "'%s' has nothing in output/ - Build it in LJ Trim Master, "
+                    "then press Refresh" % name,
+                )
+                return {'CANCELLED'}
+        else:
+            name = self.base_name
+            maps = None
+            for base_name, found in settings.assets(context):
+                if base_name == name:
+                    maps = found
+                    break
+            if maps is None:
+                self.report({'ERROR'}, "Pick an image first, or press Refresh")
+                return {'CANCELLED'}
+
+        material, warnings = build_material(name, maps)
         for message in warnings:
             self.report({'WARNING'}, message)
 

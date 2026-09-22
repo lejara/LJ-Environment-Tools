@@ -43,7 +43,8 @@ clicked in the running app yet.**
 
 ## Fixed after the first real-UI test session (Blender 5.1.2)
 
-All five reproduced, fixed, and pinned by `tests/test_ui_bugs.py` - **55/55**,
+All five reproduced, fixed, and pinned by `tests/test_ui_bugs.py` - **62/62**
+with the cleanup below,
 plus the four existing suites green afterwards: `test_affine` 43/43,
 `probe_uvwarp` 11/11, `smoke` 0 failures, `test_sync_roundtrip` 109/109. The
 add-on zip still builds. **Not re-clicked in the running app yet.**
@@ -126,6 +127,81 @@ coordinates with nothing wired out of them.
 
 Nodes the module does not own are never touched, verified with a foreign image
 node and a foreign Normal Map node in the same tree.
+
+### 6. Cleanup: a changed material is reflected, not warned about
+
+The slot row used to draw *"Slot 0 is now 'brick_mat', was 'wood_mat'"* in red
+whenever the stored name and the live one disagreed. Dropped. A row is keyed by
+**slot index**, not by material, so a rename or a swap is not a problem to
+report - and the header was already reading the live name off the mesh, which
+means the warning contradicted the line above it.
+
+`slot.material_name` stays, in the mirror and the sidecar, purely as the
+fallback label for when `slot_index` no longer resolves to a material. The same
+stale name was leaking into one export warning ("has no faces"); that now
+prefers the live name too.
+
+## Rework after that session
+
+Pinned by `tests/test_ui_bugs.py` sections 7-9 - **99/99** for the whole file,
+with the four existing suites still green. **Not clicked in the running app.**
+
+### Debugging container
+
+New collapsed sub-panel holding **Integrity Check** and **Duplicate and
+Transform**, with **Export Hooks** nested inside it. None of it is part of the
+normal loop - assign, then export - so it sits one level down. Burying the panel
+copy of Trim-Synced Export costs nothing: `File > Export > Trim-Synced Export`
+is where that menu is actually used from, and the add-on installs it there.
+
+### Dry Run Check -> Integrity Check
+
+Renamed, operator and all: `ljtm.dry_run` is now `ljtm.integrity_check`.
+
+It also used to report *"N slot(s) transformed and fully reverted"* with the
+master switch **off**, when `uv_transform_applied` had yielded None and nothing
+had been applied at all - every "restored" check passing vacuously. It now
+refuses, and says the switch is off.
+
+### Duplicate and Transform
+
+A copy of the active mesh with its trim transform baked into the UVs, to look at
+what the export will be. The original keeps its reference unwrap.
+
+The copy is **untracked**, and that is the whole design constraint rather than a
+convenience: its UVs are already in sheet space, so a registry row would mean the
+next export transformed it a second time, silently and wrongly. Both routes in
+are closed - no row, and the inherited mesh mirror is stripped so Refresh and the
+load handler cannot adopt it either. Tested by running both.
+
+Refused with a warning, creating nothing, for a mesh that is not in the Meshes
+list, has no trim assigned, has no UV map, or whose every slot fails to resolve.
+Resolution happens against the original **before** the duplicate is made, so a
+run that can do nothing leaves nothing behind.
+
+### On-Click Material
+
+Renamed from Create Material From Trim Image, and it now lists **every trim
+sheet in the project** alongside the `image_dump/` assets - one list, because it
+is one question. A sheet row builds from what the tool exported into `output/`;
+an asset row builds from the source texture. Sheets come first.
+
+The add-on had never read `output/` before, so this is new: `project.OUTPUT`,
+`scan_sheet_outputs`, and an `OutputCache` with the same Refresh-not-poll policy
+as the asset cache.
+
+Matching files to sheets is the fiddly part, and needed two rules. The remainder
+after the sheet name must **begin at a delimiter** - `Test_Trim_BaseColor.png`
+otherwise prefixes a sheet called `Test_Trim_B` with `aseColor` left over, which
+is exactly what the first run did. Then **longest prefix wins**, for
+`Test_Trim_B_BaseColor.png`, which both sheets can legitimately claim. Sheet
+names are also sanitized identically to `Exporter.fileNameFor`, or a sheet
+called `Trim.` would match none of its own files.
+
+A suffix outside the map vocabulary is kept under its own name rather than
+dropped, so `_MaskMap` counts. A sheet with nothing exported is still listed,
+marked `not exported`, and building from it is refused with a message that points
+at Build.
 
 ## Verified working in this session
 

@@ -693,7 +693,7 @@ config.meshes.remove(len(config.meshes) - 1)
 
 print()
 print("dry run")
-check("dry run passes and restores bit-exact", 'FINISHED' in bpy.ops.ljtm.dry_run())
+check("integrity check passes and restores bit-exact", 'FINISHED' in bpy.ops.ljtm.integrity_check())
 check("nothing leaked", not export_hook.leftover_modifiers())
 
 

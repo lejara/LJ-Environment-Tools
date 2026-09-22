@@ -70,6 +70,11 @@ def project_assets(context, force=False):
     return project.ASSETS.get(project_snapshot(context, force=force), force=force)
 
 
+def project_outputs(context, force=False):
+    """Last ``output/`` scan: what the tool has exported, per sheet."""
+    return project.OUTPUTS.get(project_snapshot(context, force=force), force=force)
+
+
 #: Shape of the mesh mirror. Deliberately NOT the name the old mesh-level
 #: PropertyGroup used, so a .blend saved by the previous version cannot be
 #: misread as JSON.
@@ -239,6 +244,10 @@ def _set_trim(self, value):
 
 class LJTM_SlotEntry(PropertyGroup):
     slot_index: IntProperty(name="Slot", default=0, min=0)
+    #: Label only, and only a fallback: the panel reads the live name off the
+    #: mesh, so a renamed or replaced material just shows its new name. This is
+    #: what the row says when `slot_index` no longer resolves to a material at
+    #: all. It is in the mirror and the sidecar, so it stays.
     material_name: StringProperty(name="Material")
     expanded: BoolProperty(name="Expanded", default=True)
 
@@ -278,7 +287,6 @@ class LJTM_MeshEntry(PropertyGroup):
         type=bpy.types.Object,
         description="Blender stores a pointer, so renames follow and a delete nulls it",
     )
-    expanded: BoolProperty(name="Expanded", default=True)
     slots: CollectionProperty(type=LJTM_SlotEntry)
 
 
@@ -357,6 +365,25 @@ def object_missing(entry):
     if obj is None or obj.type != 'MESH':
         return True
     return not obj.users_scene
+
+
+def is_selected(entry):
+    """Is this row's object selected in the viewport?
+
+    Read-only, so it is safe from draw - and the sidebar already redraws on a
+    selection change, so the answer never goes stale.
+
+    Guarded twice. ``object_missing`` covers the unlinked-but-alive object that
+    function documents; the ``RuntimeError`` covers the narrower case it does
+    not, an object that is in a scene but not in this view layer - an excluded
+    collection - for which ``select_get()`` raises rather than returning False.
+    """
+    if object_missing(entry):
+        return False
+    try:
+        return bool(entry.obj.select_get())
+    except RuntimeError:
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -647,6 +674,11 @@ class LJTM_OT_add_meshes(Operator):
         added = sum(
             1 for obj in context.selected_objects if add_object(config, obj) is not None
         )
+        # `add_object` appends, so the last new row is the last row. Point the
+        # list at it: the slots draw below the list now, and landing on whatever
+        # was active before would hide the mesh the user just added.
+        if added:
+            config.active_mesh = len(config.meshes) - 1
         _write_sidecar(context)
         self.report({'INFO'}, "Added %d mesh(es)" % added)
         return {'FINISHED'}
@@ -666,6 +698,11 @@ class LJTM_OT_remove_mesh(Operator):
             return {'CANCELLED'}
         mesh = mesh_of(config.meshes[self.index])
         config.meshes.remove(self.index)
+        # The list is the only way to reach a mesh's slots now, so a stale active
+        # index would leave the editor below it blank. Same clamp
+        # `settings.rebuild_asset_list` applies to the material list.
+        if config.active_mesh >= len(config.meshes):
+            config.active_mesh = max(len(config.meshes) - 1, 0)
         # The mirror goes too, or Refresh would immediately re-adopt it.
         if mesh is not None and MIRROR_KEY in mesh:
             del mesh[MIRROR_KEY]
