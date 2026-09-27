@@ -1,0 +1,14 @@
+schema_version = "1.0.0"
+
+id = "normal_brush"
+version = "1.7.0"
+name = "Normals Brush"
+tagline = "Brush for adjusting custom normals, plus seam normal tools"
+maintainer = "Mark McKay"
+type = "add-on"
+website = "https://github.com/blackears/blenderNormalBrush"
+tags = ["Modeling", "Mesh"]
+
+blender_version_min = "4.5.0"
+
+license = ["SPDX:GPL-3.0-only"]

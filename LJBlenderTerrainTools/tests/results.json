@@ -1,0 +1,21 @@
+{
+  "blender": "5.1.2",
+  "sync_seconds": {
+    "1024": 0.019049700000323355,
+    "2048": 0.13710970000101952,
+    "4096": 0.5168035999995482
+  },
+  "passed": [
+    "raw packing",
+    "normalization / tiny values / alpha-only",
+    "toggle reversibility",
+    "raw preservation",
+    "all three node graphs",
+    "resource reuse",
+    "source preservation",
+    "1K / 2K / 4K timing",
+    "packed float RGB with zero alpha persistence",
+    "file-local setting isolation",
+    "registration cleanup"
+  ]
+}

@@ -1,0 +1,134 @@
+[
+  {
+    "normalize": 0,
+    "mode": 0,
+    "diagnostic": 0,
+    "rgba": [
+      0.53104,
+      0.38944,
+      0.509680033,
+      0.56216
+    ]
+  },
+  {
+    "normalize": 0,
+    "mode": 0,
+    "diagnostic": 1,
+    "rgba": [
+      0.55568,
+      0.366480023,
+      0.56216,
+      1
+    ]
+  },
+  {
+    "normalize": 0,
+    "mode": 1,
+    "diagnostic": 0,
+    "rgba": [
+      0.8,
+      0.4,
+      0.2,
+      0.6
+    ]
+  },
+  {
+    "normalize": 0,
+    "mode": 1,
+    "diagnostic": 1,
+    "rgba": [
+      0.7,
+      0.15,
+      0.6,
+      1
+    ]
+  },
+  {
+    "normalize": 0,
+    "mode": 2,
+    "diagnostic": 0,
+    "rgba": [
+      0.1362564,
+      0.1388549,
+      0.206439182,
+      0.3
+    ]
+  },
+  {
+    "normalize": 0,
+    "mode": 2,
+    "diagnostic": 1,
+    "rgba": [
+      0.8,
+      0,
+      0.3,
+      1
+    ]
+  },
+  {
+    "normalize": 1,
+    "mode": 0,
+    "diagnostic": 0,
+    "rgba": [
+      0.449035645,
+      0.3470459,
+      0.43233642,
+      0.5014282
+    ]
+  },
+  {
+    "normalize": 1,
+    "mode": 0,
+    "diagnostic": 1,
+    "rgba": [
+      0.6255005,
+      0.261749268,
+      0.5014282,
+      1
+    ]
+  },
+  {
+    "normalize": 1,
+    "mode": 1,
+    "diagnostic": 0,
+    "rgba": [
+      0.8,
+      0.4,
+      0.2,
+      0.6
+    ]
+  },
+  {
+    "normalize": 1,
+    "mode": 1,
+    "diagnostic": 1,
+    "rgba": [
+      0.7,
+      0.15,
+      0.6,
+      1
+    ]
+  },
+  {
+    "normalize": 1,
+    "mode": 2,
+    "diagnostic": 0,
+    "rgba": [
+      0.123642154,
+      0.162835643,
+      0.247758523,
+      0.3
+    ]
+  },
+  {
+    "normalize": 1,
+    "mode": 2,
+    "diagnostic": 1,
+    "rgba": [
+      0.8,
+      0,
+      0.3,
+      1
+    ]
+  }
+]

@@ -1,0 +1,75 @@
+[
+  {
+    "resolution": 1024,
+    "channel": "R",
+    "paint_delta": 1.0,
+    "smooth_delta": 0.0011690855026245117,
+    "undo": true,
+    "redo": true
+  },
+  {
+    "resolution": 1024,
+    "channel": "G",
+    "paint_delta": 1.0,
+    "smooth_delta": 0.0011690855026245117,
+    "undo": true,
+    "redo": true
+  },
+  {
+    "resolution": 1024,
+    "channel": "B",
+    "paint_delta": 1.0,
+    "smooth_delta": 0.0011690855026245117,
+    "undo": true,
+    "redo": true
+  },
+  {
+    "resolution": 1024,
+    "channel": "A",
+    "paint_delta": 1.0,
+    "smooth_delta": 0.0011690855026245117,
+    "undo": true,
+    "redo": true
+  },
+  {
+    "resolution": 2048,
+    "channel": "R",
+    "paint_delta": 1.0,
+    "smooth_delta": 0.0005922913551330566,
+    "undo": true,
+    "redo": true
+  },
+  {
+    "resolution": 2048,
+    "channel": "G",
+    "paint_delta": 1.0,
+    "smooth_delta": 0.0005922913551330566,
+    "undo": true,
+    "redo": true
+  },
+  {
+    "resolution": 2048,
+    "channel": "B",
+    "paint_delta": 1.0,
+    "smooth_delta": 0.0005922913551330566,
+    "undo": true,
+    "redo": true
+  },
+  {
+    "resolution": 2048,
+    "channel": "A",
+    "paint_delta": 1.0,
+    "smooth_delta": 0.0005922913551330566,
+    "undo": true,
+    "redo": true
+  },
+  {
+    "fill_global_undo_redo": true
+  },
+  {
+    "clear_undo": true
+  },
+  {
+    "sidebar_native_clear": true
+  }
+]

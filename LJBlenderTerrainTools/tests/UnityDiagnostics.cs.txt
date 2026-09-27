@@ -1,0 +1,48 @@
+// Method body for Unity MCP execute_code. Creates only transient GPU resources.
+var root = Application.dataPath + "/LJ Environment Tools/LJBlenderTerrainTools/tests/";
+var functionFile = System.IO.File.ReadAllText(System.IO.Path.GetFullPath(Application.dataPath + "/../Packages/com.jbooth.better-lit-shader/Shaders/BetterShadersSource/FunctionLibrary.surfshader"));
+var heightFunction = System.Text.RegularExpressions.Regex.Match(functionFile, @"half HeightBlend\(half h1, half h2, half slope, half contrast\)\s*\{[^}]+\}").Value;
+if (heightFunction.Length == 0) throw new System.Exception("Installed HeightBlend function not found");
+var code = "Shader \"Hidden/LJTerrainDiagnosticTemporary\" { SubShader { Pass { ZTest Always ZWrite Off Cull Off HLSLPROGRAM\n#pragma vertex vert_img\n#pragma fragment frag\n#include \"UnityCG.cginc\"\n" + heightFunction + @"
+float _Mode; float _Normalize; float _Diagnostic;
+float4 frag(v2f_img input) : SV_Target {
+ float3 colors[5] = {float3(.1,.2,.3),float3(.8,.4,.2),float3(.2,.8,.6),float3(.7,.1,.4),float3(.4,.6,.9)};
+ float heights[5] = {.3,.6,.2,.8,.5};
+ float4 weights = float4(.7,.2,.4,.3);
+ if (_Normalize > .5) weights /= dot(weights, float4(1,1,1,1));
+ float3 color=colors[0]; float h=heights[0]; float smooth=.8; float metal=0;
+ for (int i=0;i<4;i++) {
+  float w=weights[i]; float f=w;
+  if (_Mode > .5 && _Mode < 1.5) f=HeightBlend(h,heights[i+1],w,.5);
+  if (_Mode > 1.5) color=lerp(color,color*2*colors[i+1],w);
+  else { color=lerp(color,colors[i+1],f); h=lerp(h,heights[i+1],f); smooth=lerp(smooth,.8-(i+1)*.1,f); metal=lerp(metal,(i+1)*.15,f); }
+ }
+ if (_Diagnostic>.5) return float4(smooth,metal,h,1);
+ return float4(color,h);
+}
+ENDHLSL
+} } }";
+Shader shader=null; Material mat=null; RenderTexture rt=null; Texture2D read=null;
+var previous=RenderTexture.active;
+var rows=new System.Collections.Generic.List<object>();
+try {
+ shader=UnityEditor.ShaderUtil.CreateShaderAsset(code, false);
+ if(UnityEditor.ShaderUtil.ShaderHasError(shader)) return UnityEditor.ShaderUtil.GetShaderMessages(shader);
+ mat=new Material(shader);
+ rt=new RenderTexture(1,1,0,RenderTextureFormat.ARGBFloat,RenderTextureReadWrite.Linear); rt.Create();
+ read=new Texture2D(1,1,TextureFormat.RGBAFloat,false,true);
+ for(int norm=0;norm<2;norm++) for(int mode=0;mode<3;mode++) for(int diagnostic=0;diagnostic<2;diagnostic++) {
+  mat.SetFloat("_Normalize",norm); mat.SetFloat("_Mode",mode); mat.SetFloat("_Diagnostic",diagnostic);
+  Graphics.Blit(Texture2D.whiteTexture,rt,mat); RenderTexture.active=rt;
+  read.ReadPixels(new Rect(0,0,1,1),0,0); read.Apply();
+  var c=read.GetPixel(0,0);
+  rows.Add(new { normalize=norm, mode=mode, diagnostic=diagnostic, rgba=new[]{c.r,c.g,c.b,c.a} });
+ }
+ return rows;
+} finally {
+ RenderTexture.active=previous;
+ if(rt!=null) {rt.Release();UnityEngine.Object.DestroyImmediate(rt);}
+ if(read!=null) UnityEngine.Object.DestroyImmediate(read);
+ if(mat!=null) UnityEngine.Object.DestroyImmediate(mat);
+ if(shader!=null) UnityEngine.Object.DestroyImmediate(shader);
+}
