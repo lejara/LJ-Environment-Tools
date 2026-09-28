@@ -6,7 +6,7 @@ import { Vec2 } from '@models/Vec2'
 import { Snapshot } from '@models/Snapshot'
 import type { TrimImage } from '@models/TrimImage'
 import type { TrimSheet } from '@models/TrimSheet'
-import type { OpenProjectResult } from '@shared/types'
+import type { OpenProjectResult, SerializedProjectFolders } from '@shared/types'
 import { projectService } from '../services/projectService'
 import type { PixelSize } from './assetsStore'
 
@@ -75,6 +75,7 @@ interface ProjectState {
   setSheetResolution(sheetId: string, resolution: Resolution): void
   setSheetPresets(sheetId: string, presetNames: string[]): void
   setDefaultResolution(resolution: Resolution): void
+  setFolders(folders: SerializedProjectFolders): void
 
   markSheetClean(sheetId: string): void
   save(): Promise<void>
@@ -192,6 +193,8 @@ export const useProjectStore = create<ProjectState>((set, get) => {
 
     setDefaultResolution: (resolution) =>
       mutate((project) => project.setDefaultResolution(resolution)),
+
+    setFolders: (folders) => mutate((project) => project.setFolders(folders)),
 
     markSheetClean: (sheetId) => mutate((project) => project.findSheet(sheetId)?.clearDirty()),
 

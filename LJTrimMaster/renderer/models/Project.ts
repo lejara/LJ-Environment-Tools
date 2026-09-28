@@ -1,7 +1,7 @@
 import { ProjectData } from './ProjectData'
 import { TrimSheet } from './TrimSheet'
 import { Resolution } from './Resolution'
-import type { SerializedProjectData } from '@shared/types'
+import type { SerializedProjectData, SerializedProjectFolders } from '@shared/types'
 
 /**
  * Root aggregate: the open project. Owns the sheet list, which sheet is active,
@@ -115,6 +115,10 @@ export class Project {
   setDefaultResolution(resolution: Resolution): void {
     // Deliberately does NOT touch existing sheets — each keeps its own.
     this.data.defaults.defaultTrimResolution = resolution
+  }
+
+  setFolders(folders: SerializedProjectFolders): void {
+    this.data.folders = ProjectData.cleanFolders(folders)
   }
 
   serialize(): SerializedProjectData {

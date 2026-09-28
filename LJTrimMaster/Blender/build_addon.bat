@@ -1,44 +1,28 @@
 @echo off
-setlocal enabledelayedexpansion
+setlocal
 
-REM Build a Blender-installable add-on zip from the BlenderAddon source folder.
-REM Blender expects the zip to contain a single top-level folder whose name
-REM matches the add-on package, with __init__.py inside it.
+REM Build lj_trim_master into an installable Blender extension zip, written
+REM next to this .bat.
+REM
+REM   build_addon.bat
+REM   build_addon.bat -Blender "C:\Program Files\Blender Foundation\Blender 4.5\blender.exe"
+REM   build_addon.bat -Output C:\some\folder
+REM
+REM All the work is in build.ps1 (validates the manifest with Blender's own
+REM packer, falls back to a plain zip). This just runs it without needing to
+REM change the PowerShell execution policy.
 
 set "SCRIPT_DIR=%~dp0"
-set "ADDON_NAME=Lj Environment Tools"
-set "OUTPUT_ZIP=%SCRIPT_DIR%%ADDON_NAME%.zip"
-set "STAGE_DIR=%TEMP%\ljaddon_%RANDOM%%RANDOM%"
-set "PKG_DIR=%STAGE_DIR%\%ADDON_NAME%"
 
-if exist "%STAGE_DIR%" rmdir /s /q "%STAGE_DIR%"
-mkdir "%PKG_DIR%"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%build.ps1" %*
+set "CODE=%ERRORLEVEL%"
 
-REM Copy only top-level .py files. Skip .meta, __pycache__, and the prior zip.
-set "FOUND_PY="
-for %%F in ("%SCRIPT_DIR%*.py") do (
-    copy /y "%%~fF" "%PKG_DIR%\" >nul
-    set "FOUND_PY=1"
+if not "%CODE%"=="0" (
+    echo.
+    echo Build FAILED with exit code %CODE% 1>&2
 )
 
-if not defined FOUND_PY (
-    echo Error: no .py files found in %SCRIPT_DIR% 1>&2
-    rmdir /s /q "%STAGE_DIR%"
-    exit /b 1
-)
+REM Keep the window open when double-clicked from Explorer.
+echo %CMDCMDLINE% | find /i "/c" >nul && pause
 
-if exist "%OUTPUT_ZIP%" del /q "%OUTPUT_ZIP%"
-
-REM Use PowerShell's Compress-Archive to zip the staged folder so the archive's
-REM top-level entry is "<ADDON_NAME>\...", which is what Blender requires.
-powershell -NoProfile -Command "Compress-Archive -Path '%PKG_DIR%' -DestinationPath '%OUTPUT_ZIP%' -Force"
-if errorlevel 1 (
-    echo Error: Compress-Archive failed 1>&2
-    rmdir /s /q "%STAGE_DIR%"
-    exit /b 1
-)
-
-rmdir /s /q "%STAGE_DIR%"
-
-echo Built: %OUTPUT_ZIP%
-endlocal
+exit /b %CODE%

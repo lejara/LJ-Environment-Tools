@@ -22,7 +22,11 @@ const TRAILING_JUNK = /[. ]+$/
 
 /**
  * Exports one sheet: walks each enabled preset's outputs, renders each through
- * its strategy, and writes the result into the project's output/ folder.
+ * its strategy, and writes the result into `<output>/<SheetName>/`.
+ *
+ * Every file a sheet produces lands in its own folder, named with the same
+ * sanitized stem as the files themselves. The Blender addon mirrors that
+ * naming (project.output_base_name) to find them, so change both together.
  *
  * Emits EXPORT_* unconditionally, so both the manual Build path and the Auto
  * Export path flow through here and listeners never need to tell them apart.
@@ -40,12 +44,16 @@ export class Exporter {
 
   constructor(private readonly bus: EventBus) {}
 
-  /** @returns absolute paths of everything written. */
+  /**
+   * @param outputRoot the project's output folder; the sheet's own folder is
+   *   created inside it.
+   * @returns absolute paths of everything written.
+   */
   async export(
     sheet: TrimSheet,
     assets: Map<string, Asset>,
     presets: Preset[],
-    outputDir: string
+    outputRoot: string
   ): Promise<string[]> {
     const enabled = presets.filter((preset) => sheet.enabledPresetNames.includes(preset.name))
 
@@ -66,6 +74,7 @@ export class Exporter {
     const loader = new ImageLoader()
     const outputPaths: string[] = []
     const warnings: string[] = []
+    const outputDir = join(outputRoot, this.safeSheetName(sheet))
 
     try {
       await mkdir(outputDir, { recursive: true })
@@ -138,13 +147,17 @@ export class Exporter {
     return path
   }
 
-  /**
-   * `<SheetName><outputSuffix>.<ext>`, with anything a filesystem would reject
-   * replaced — sheet names are free text typed in the tab bar.
-   */
+  /** `<SheetName><outputSuffix>.<ext>`. */
   private fileNameFor(sheet: TrimSheet, output: PresetOutput): string {
-    const safeName =
-      sheet.name.replace(ILLEGAL_FILENAME_CHARS, '_').replace(TRAILING_JUNK, '').trim() || 'Sheet'
-    return output.fileName(safeName)
+    return output.fileName(this.safeSheetName(sheet))
+  }
+
+  /**
+   * The sheet name with anything a filesystem would reject replaced — sheet
+   * names are free text typed in the tab bar. Used for both the sheet's folder
+   * and its file stems.
+   */
+  private safeSheetName(sheet: TrimSheet): string {
+    return sheet.name.replace(ILLEGAL_FILENAME_CHARS, '_').replace(TRAILING_JUNK, '').trim() || 'Sheet'
   }
 }

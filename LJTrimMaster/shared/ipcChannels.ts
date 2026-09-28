@@ -8,6 +8,7 @@ export const IpcChannels = {
   PROJECT_OPEN: 'project:open',
   PROJECT_BROWSE: 'project:browse',
   PROJECT_SAVE: 'project:save',
+  PROJECT_PICK_FOLDER: 'project:pickFolder',
 
   // main/fs/recentProjects.ts
   RECENT_LIST: 'recent:list',

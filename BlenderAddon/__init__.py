@@ -12,6 +12,8 @@ if "bpy" in locals():
     import importlib
     if "preferences" in locals():
         importlib.reload(preferences)
+    if "trim_master_bridge" in locals():
+        importlib.reload(trim_master_bridge)
     if "export" in locals():
         importlib.reload(export)
     if "panel" in locals():
@@ -25,6 +27,7 @@ if "bpy" in locals():
 
 import bpy
 from . import preferences
+from . import trim_master_bridge
 from . import export
 from . import panel
 from . import materials_import

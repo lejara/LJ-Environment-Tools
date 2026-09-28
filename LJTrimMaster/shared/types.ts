@@ -94,10 +94,25 @@ export interface SerializedProjectDefaults {
   defaultTrimResolution: SerializedResolution
 }
 
+/**
+ * Where the project reads source textures from and writes exports to.
+ *
+ * Each value is either absolute or relative to the project root. Absent or
+ * blank means the stock folder (`image_dump/`, `output/`). Relative paths are
+ * what the folder picker stores for anything inside the root, so a project
+ * copied to another machine keeps working.
+ */
+export interface SerializedProjectFolders {
+  imageDump?: string
+  output?: string
+}
+
 export interface SerializedProjectData {
   version: string
   defaults: SerializedProjectDefaults
   sheets: SerializedSheet[]
+  /** Optional: a project written before this existed uses the stock folders. */
+  folders?: SerializedProjectFolders
   /**
    * Cached copy of the tool's `maps.yaml` vocabulary.
    *

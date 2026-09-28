@@ -55,7 +55,10 @@ export function Toolbar({
     // too; main emits its own on the far side of the invoke.
     appBus.emit(AppEvent.REFRESH_REQUESTED, { projectRoot: project.rootPath });
     try {
-      const result = await refreshService.refreshAll(project.rootPath);
+      const result = await refreshService.refreshAll(
+        project.rootPath,
+        project.data.folders,
+      );
       setAssets(result.assets, result.mapConfig);
       setPresets(result.presets, result.warnings);
       setBlenderLinks(result.blenderLinks);
@@ -78,6 +81,7 @@ export function Toolbar({
         assets: assets.map((asset) => asset.serialize()),
         presets: presets.map((preset) => preset.serialize()),
         projectRoot: project.rootPath,
+        folders: project.data.folders,
       });
       // Status comes from the EXPORT_* events, not from this return value.
     } catch (err) {

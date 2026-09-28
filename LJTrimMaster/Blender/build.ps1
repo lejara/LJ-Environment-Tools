@@ -2,7 +2,7 @@
 #
 #   .\build.ps1
 #   .\build.ps1 -Blender "C:\Program Files\Blender Foundation\Blender 4.5\blender.exe"
-#   .\build.ps1 -Output .\dist
+#   .\build.ps1 -Output .\dist      (default: this script's own folder)
 #
 # Prefers `blender --command extension build`, which is the official packer and
 # validates blender_manifest.toml on the way through - a malformed manifest is
@@ -14,10 +14,15 @@
 [CmdletBinding()]
 param(
     [string] $Blender = "",
-    [string] $Output = "$PSScriptRoot\dist"
+    [string] $Output = ""
 )
 
 $ErrorActionPreference = 'Stop'
+
+# Resolved here rather than as the parameter default: Windows PowerShell 5.1
+# leaves $PSScriptRoot empty inside param(), which sent the zip to C:\dist.
+if (-not $Output) { $Output = $PSScriptRoot }
+$Output = [IO.Path]::GetFullPath($Output)
 
 $source = Join-Path $PSScriptRoot 'lj_trim_master'
 $manifest = Join-Path $source 'blender_manifest.toml'

@@ -1,21 +1,25 @@
 import { readFile, writeFile, mkdir, access, rename, unlink } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { join } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import {
   PROJECT_DATA_VERSION,
   type OpenProjectResult,
   type SerializedProjectData,
+  type SerializedProjectFolders,
 } from "@shared/types";
 
 /**
  * Project scaffolding and projectData.json I/O.
  *
- * The folder layout is fixed by the spec:
+ * The stock folder layout:
  *   /root
  *     projectData.json
  *     /image_dump        source textures the user unwraps against
  *     /placeholder slots
- *     /output            everything the exporter writes
+ *     /output            everything the exporter writes, one folder per sheet
+ *
+ * image_dump and output can be pointed elsewhere from Settings — see
+ * SerializedProjectFolders. Every path lookup goes through the helpers below.
  */
 export class ProjectFs {
   static readonly DATA_FILE = "projectData.json";
@@ -23,12 +27,33 @@ export class ProjectFs {
   static readonly PLACEHOLDER_SLOTS = "placeholder slots";
   static readonly OUTPUT = "output";
 
-  static imageDumpPath(root: string): string {
-    return join(root, ProjectFs.IMAGE_DUMP);
+  static imageDumpPath(root: string, folders?: SerializedProjectFolders): string {
+    return ProjectFs.resolveFolder(root, folders?.imageDump, ProjectFs.IMAGE_DUMP);
   }
 
-  static outputPath(root: string): string {
-    return join(root, ProjectFs.OUTPUT);
+  static outputPath(root: string, folders?: SerializedProjectFolders): string {
+    return ProjectFs.resolveFolder(root, folders?.output, ProjectFs.OUTPUT);
+  }
+
+  /** A configured folder, absolute or root-relative, else the stock one. */
+  private static resolveFolder(
+    root: string,
+    configured: string | undefined,
+    fallback: string,
+  ): string {
+    const value = configured?.trim();
+    return value ? resolve(root, value) : join(root, fallback);
+  }
+
+  /**
+   * What to store for a folder the user picked: root-relative when it sits
+   * inside the project (so the project stays portable), absolute otherwise.
+   */
+  static toStoredFolder(root: string, picked: string): string {
+    const rel = relative(root, picked);
+    if (rel === "") return ".";
+    if (rel.startsWith("..") || isAbsolute(rel)) return picked;
+    return rel.split("\\").join("/");
   }
 
   static dataPath(root: string): string {
@@ -75,12 +100,13 @@ export class ProjectFs {
     }
 
     // Ensure the folders exist even if the project was opened from a copy that
-    // dropped empty directories (git does this).
+    // dropped empty directories (git does this). A configured folder on a
+    // drive that is not mounted right now must not block opening the project.
     await Promise.all([
-      mkdir(ProjectFs.imageDumpPath(rootPath), { recursive: true }),
+      mkdir(ProjectFs.imageDumpPath(rootPath, data.folders), { recursive: true }),
       mkdir(join(rootPath, ProjectFs.PLACEHOLDER_SLOTS), { recursive: true }),
-      mkdir(ProjectFs.outputPath(rootPath), { recursive: true }),
-    ]);
+      mkdir(ProjectFs.outputPath(rootPath, data.folders), { recursive: true }),
+    ].map((pending) => pending.catch(() => undefined)));
 
     return { rootPath, data: this.migrate(data) };
   }
@@ -199,6 +225,7 @@ export class ProjectFs {
     // re-stamps it on the next refresh, and dropping it here would blind the
     // Blender addon until then.
     if (data.maps) migrated.maps = data.maps;
+    if (data.folders) migrated.folders = data.folders;
     return migrated;
   }
 

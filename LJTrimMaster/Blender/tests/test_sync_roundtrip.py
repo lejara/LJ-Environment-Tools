@@ -279,7 +279,7 @@ for name in ("wall_BaseColor.png", "wall_Normal.png"):
 os.makedirs(os.path.join(DUMP, ".cache"), exist_ok=True)
 open(os.path.join(DUMP, ".cache", "wood_BaseColor.png"), "wb").close()
 
-assets = dict(project.scan_assets(ROOT, snapshot.maps))
+assets = dict(project.scan_assets(snapshot.image_dump, snapshot.maps))
 check("siblings group into one asset",
       sorted(assets.get("wood", {})) == ["BaseColor", "Normal"], str(assets.get("wood")))
 check("a subfolder carries the folder in the base name", "stone/wall" in assets, str(list(assets)))

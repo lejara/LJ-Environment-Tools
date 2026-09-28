@@ -525,6 +525,70 @@ def commit(context, plan):
 
 
 # ---------------------------------------------------------------------------
+# Public entry point for other add-ons
+# ---------------------------------------------------------------------------
+
+class ExternalExport:
+    """Handed to the caller of :func:`external_export`.
+
+    Set ``succeeded`` once the file is written; only then are the slots
+    recorded as exported.
+    """
+
+    __slots__ = ("plan", "succeeded")
+
+    def __init__(self, plan):
+        self.plan = plan
+        self.succeeded = False
+
+    @property
+    def count(self):
+        return self.plan.count if self.plan is not None else 0
+
+
+@contextmanager
+def external_export(context, report=None, apply_modifiers=None, selection_only=True):
+    """For an exporter add-on that writes something other than the scene itself.
+
+    The ``execute`` hook only sees what the real exporter is handed. An add-on
+    that duplicates objects first (to apply transforms, join meshes, rename)
+    hands it copies the registry has never heard of: with ``use_selection`` the
+    registered originals are not selected and are skipped, and without it their
+    UVs are transformed but the copies were already taken. Either way the file
+    gets untransformed UVs.
+
+    Wrapping the whole export in this - **before** any duplication - transforms
+    the originals so every copy inherits sheet-space UVs, and the nested
+    exporter call is a no-op for the hook thanks to ``_depth``. *selection_only*
+    means the selection at entry, which is what the caller is about to export.
+
+        with export_hook.external_export(context, report) as session:
+            ...duplicate, export...
+            session.succeeded = True
+    """
+    with uv_transform_applied(context, report, apply_modifiers, selection_only) as plan:
+        session = ExternalExport(plan)
+        yield session
+    if session.succeeded:
+        commit(context, plan)
+
+
+@contextmanager
+def bypass():
+    """Exports inside run untouched - for a caller that has opted out.
+
+    Raises the re-entrancy guard, so the ``execute`` hook yields None and
+    neither transforms nor commits.
+    """
+    global _depth
+    _depth += 1
+    try:
+        yield
+    finally:
+        _depth -= 1
+
+
+# ---------------------------------------------------------------------------
 # Exporter hooks
 # ---------------------------------------------------------------------------
 

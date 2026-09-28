@@ -12,6 +12,7 @@ _SHARED_PROP_NAMES = (
     "combine_into_single_fbx",
     "apply_transforms_on_export",
     "file_name",
+    "trim_master_support",
 )
 
 
@@ -65,6 +66,11 @@ def _shared_annotations():
             name="File Name",
             description="Name of the FBX file (without extension). When empty, the selected object's name is used",
             default="",
+        ),
+        "trim_master_support": bpy.props.BoolProperty(
+            name="LJ Trim Master Support",
+            description="When LJ Trim Master is installed, export UVs transformed into trim-sheet space. When off, Trim Master is ignored and UVs export exactly as they are in the scene",
+            default=True,
         ),
     }
 
@@ -132,6 +138,7 @@ def draw_shared(layout, target):
     col = layout.column(heading="Options")
     col.prop(target, "combine_into_single_fbx")
     col.prop(target, "apply_transforms_on_export")
+    col.prop(target, "trim_master_support")
 
 
 class LJEXPORT_AP_preferences(bpy.types.AddonPreferences):

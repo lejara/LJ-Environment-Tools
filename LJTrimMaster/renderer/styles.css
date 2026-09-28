@@ -364,6 +364,12 @@ code {
 }
 .modal--wide { width: 470px; }
 
+/* --- Settings: folders -------------------------------------------------- */
+
+.settings__folder { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.settings__folder-label { flex: 0 0 92px; color: var(--text-dim); }
+.settings__folder-input { flex: 1; min-width: 0; }
+
 /* --- How To Use --------------------------------------------------------- */
 
 .howto__section { margin-bottom: 18px; }

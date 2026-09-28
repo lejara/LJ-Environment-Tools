@@ -2,6 +2,7 @@ import os
 import bpy
 
 from . import preferences
+from . import trim_master_bridge
 
 
 # ---------------------------------------------------------------------------
@@ -79,6 +80,37 @@ def _duplicate_with_data(context, obj):
     return copy
 
 
+def _remove_data(data):
+    if isinstance(data, bpy.types.Mesh):
+        bpy.data.meshes.remove(data)
+    elif isinstance(data, bpy.types.Armature):
+        bpy.data.armatures.remove(data)
+
+
+def _strip_materials(obj):
+    """Empty `obj`'s material slots. Returns a backup for `_restore_materials`.
+
+    `materials.clear()` also resets every face's material_index to 0, so the
+    indices are saved too - otherwise a multi-material mesh comes back with all
+    faces on slot 0."""
+    mesh = obj.data
+    indices = [0] * len(mesh.polygons)
+    mesh.polygons.foreach_get("material_index", indices)
+    backup = (list(mesh.materials), indices)
+    mesh.materials.clear()
+    return backup
+
+
+def _restore_materials(obj, backup):
+    materials, indices = backup
+    mesh = obj.data
+    mesh.materials.clear()
+    for m in materials:
+        mesh.materials.append(m)
+    mesh.polygons.foreach_set("material_index", indices)
+    mesh.update()
+
+
 def _build_export_copies(context, targets):
     """Duplicate `targets`, swap names so copies inherit the originals' names,
     zero each copy's location, and apply all transforms. Returns
@@ -106,7 +138,11 @@ def _build_export_copies(context, targets):
     def restore():
         for c in copies:
             try:
+                data = c.data
                 bpy.data.objects.remove(c, do_unlink=True)
+                # The copied mesh/armature would otherwise linger as an orphan.
+                if data is not None and data.users == 0:
+                    _remove_data(data)
             except (ReferenceError, RuntimeError):
                 pass
         for orig, name in name_map:
@@ -194,10 +230,22 @@ class LJEXPORT_OT_export_selected(bpy.types.Operator):
         original_selection = list(context.selected_objects)
         original_active = context.view_layer.objects.active
 
-        if prefs.combine_into_single_fbx:
-            result_msg = self._export_combined(context, targets, object_types, prefs, export_dir)
-        else:
-            result_msg = self._export_per_object(context, targets, object_types, prefs, export_dir)
+        # Trim Master (if installed) must transform the UVs before any copies are
+        # made, or the copies export untransformed - see trim_master_bridge.
+        # With support off, Trim Master is kept out of this export entirely.
+        def trim_report(message):
+            self.report({'WARNING'}, "LJ Trim Master: " + message)
+
+        with trim_master_bridge.trim_uvs_applied(
+            context, trim_report, USE_MESH_MODIFIERS, enabled=prefs.trim_master_support
+        ) as trims:
+            if prefs.combine_into_single_fbx:
+                result_msg = self._export_combined(context, targets, object_types, prefs, export_dir)
+            else:
+                result_msg = self._export_per_object(context, targets, object_types, prefs, export_dir)
+            trims.succeeded = True
+        if trims.count:
+            result_msg += f" (trim UVs applied to {trims.count} slot(s))"
 
         bpy.ops.object.select_all(action='DESELECT')
         for obj in original_selection:
@@ -237,8 +285,7 @@ class LJEXPORT_OT_export_selected(bpy.types.Operator):
 
             material_backup = None
             if not prefs.export_materials and export_obj.type == 'MESH' and export_obj.data is not None:
-                material_backup = list(export_obj.data.materials)
-                export_obj.data.materials.clear()
+                material_backup = _strip_materials(export_obj)
 
             try:
                 _run_fbx_export(filepath, object_types, prefs.export_animations)
@@ -249,9 +296,7 @@ class LJEXPORT_OT_export_selected(bpy.types.Operator):
                     restore()
                 else:
                     if material_backup is not None:
-                        export_obj.data.materials.clear()
-                        for m in material_backup:
-                            export_obj.data.materials.append(m)
+                        _restore_materials(export_obj, material_backup)
                     if original_location is not None:
                         obj.location = original_location
 
@@ -279,12 +324,13 @@ class LJEXPORT_OT_export_selected(bpy.types.Operator):
             obj.select_set(True)
         context.view_layer.objects.active = export_objects[0]
 
+        # Keyed by mesh: objects sharing one would otherwise back up an already
+        # emptied slot list and restore it empty.
         material_backups = {}
         if not prefs.export_materials:
             for obj in export_objects:
-                if obj.type == 'MESH' and obj.data is not None:
-                    material_backups[obj] = list(obj.data.materials)
-                    obj.data.materials.clear()
+                if obj.type == 'MESH' and obj.data is not None and obj.data not in material_backups:
+                    material_backups[obj.data] = (obj, _strip_materials(obj))
 
         try:
             _run_fbx_export(filepath, object_types, prefs.export_animations)
@@ -292,9 +338,7 @@ class LJEXPORT_OT_export_selected(bpy.types.Operator):
             if restore is not None:
                 restore()
             else:
-                for obj, mats in material_backups.items():
-                    obj.data.materials.clear()
-                    for m in mats:
-                        obj.data.materials.append(m)
+                for obj, backup in material_backups.values():
+                    _restore_materials(obj, backup)
 
         return f"Exported {len(targets)} object(s) to {filepath}"

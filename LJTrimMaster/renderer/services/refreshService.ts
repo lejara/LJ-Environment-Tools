@@ -1,5 +1,5 @@
 import { IpcChannels } from '@shared/ipcChannels'
-import type { RefreshResult } from '@shared/types'
+import type { RefreshResult, SerializedProjectFolders } from '@shared/types'
 import { invoke } from './bridge'
 
 /**
@@ -8,6 +8,6 @@ import { invoke } from './bridge'
  * panel subscribes to — the toolbar button doesn't need to know who cares.
  */
 export const refreshService = {
-  refreshAll: (projectRoot?: string): Promise<RefreshResult> =>
-    invoke<RefreshResult>(IpcChannels.REFRESH_ALL, projectRoot)
+  refreshAll: (projectRoot?: string, folders?: SerializedProjectFolders): Promise<RefreshResult> =>
+    invoke<RefreshResult>(IpcChannels.REFRESH_ALL, projectRoot, folders)
 }

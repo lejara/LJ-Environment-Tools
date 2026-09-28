@@ -7,6 +7,7 @@ import type {
   SerializedAsset,
   SerializedPreset,
   SerializedProjectData,
+  SerializedProjectFolders,
   SerializedSheet
 } from '@shared/types'
 import { ProjectFs } from './fs/projectFs'
@@ -86,6 +87,21 @@ export function registerIpc(bus: EventBus, binDir: string): void {
     }
   )
 
+  // Settings' Browse buttons. Returns what to store, not the raw pick — see
+  // ProjectFs.toStoredFolder.
+  ipcMain.handle(
+    IpcChannels.PROJECT_PICK_FOLDER,
+    async (_e, rootPath: string, title: string, current?: string) => {
+      const result = await dialog.showOpenDialog({
+        title,
+        defaultPath: current,
+        properties: ['openDirectory', 'createDirectory']
+      })
+      if (result.canceled || !result.filePaths[0]) return null
+      return ProjectFs.toStoredFolder(rootPath, result.filePaths[0])
+    }
+  )
+
   // --- Recents -------------------------------------------------------------
   ipcMain.handle(IpcChannels.RECENT_LIST, () => recentProjects.listExisting())
   ipcMain.handle(IpcChannels.RECENT_REMOVE, (_e, path: string) => recentProjects.remove(path))
@@ -93,31 +109,34 @@ export function registerIpc(bus: EventBus, binDir: string): void {
   // --- Refresh -------------------------------------------------------------
   // One entry point, many subscribers: re-reads maps.yaml + preset-packs/ and
   // re-scans image_dump/, then broadcasts the result.
-  ipcMain.handle(IpcChannels.REFRESH_ALL, async (_e, projectRoot?: string): Promise<RefreshResult> => {
-    bus.emit(AppEvent.REFRESH_REQUESTED, { projectRoot })
+  ipcMain.handle(
+    IpcChannels.REFRESH_ALL,
+    async (_e, projectRoot?: string, folders?: SerializedProjectFolders): Promise<RefreshResult> => {
+      bus.emit(AppEvent.REFRESH_REQUESTED, { projectRoot })
 
-    const { config, warnings: mapWarnings } = await mapConfigLoader.load(binDir)
-    const { presets, warnings: presetWarnings } = await presetLoader.load(binDir)
-    const { assets, warnings: assetWarnings } = projectRoot
-      ? await assetScanner.scan(ProjectFs.imageDumpPath(projectRoot), config)
-      : { assets: [], warnings: [] }
-    // Advisory only: which Blender meshes are unwrapped against this project's
-    // trims, so a delete can warn first. Never blocks, never acted on.
-    const { links, warnings: linkWarnings } = projectRoot
-      ? await blenderLinksReader.read(projectRoot)
-      : { links: [], warnings: [] }
+      const { config, warnings: mapWarnings } = await mapConfigLoader.load(binDir)
+      const { presets, warnings: presetWarnings } = await presetLoader.load(binDir)
+      const { assets, warnings: assetWarnings } = projectRoot
+        ? await assetScanner.scan(ProjectFs.imageDumpPath(projectRoot, folders), config)
+        : { assets: [], warnings: [] }
+      // Advisory only: which Blender meshes are unwrapped against this project's
+      // trims, so a delete can warn first. Never blocks, never acted on.
+      const { links, warnings: linkWarnings } = projectRoot
+        ? await blenderLinksReader.read(projectRoot)
+        : { links: [], warnings: [] }
 
-    const result: RefreshResult = {
-      mapConfig: config.serialize(),
-      presets: presets.map((preset) => preset.serialize()),
-      assets: assets.map((asset) => asset.serialize()),
-      blenderLinks: links,
-      warnings: [...mapWarnings, ...presetWarnings, ...assetWarnings, ...linkWarnings]
+      const result: RefreshResult = {
+        mapConfig: config.serialize(),
+        presets: presets.map((preset) => preset.serialize()),
+        assets: assets.map((asset) => asset.serialize()),
+        blenderLinks: links,
+        warnings: [...mapWarnings, ...presetWarnings, ...assetWarnings, ...linkWarnings]
+      }
+
+      bus.emit(AppEvent.REFRESH_COMPLETED, result)
+      return result
     }
-
-    bus.emit(AppEvent.REFRESH_COMPLETED, result)
-    return result
-  })
+  )
 
   // --- Export --------------------------------------------------------------
   ipcMain.handle(
@@ -129,6 +148,7 @@ export function registerIpc(bus: EventBus, binDir: string): void {
         assets: SerializedAsset[]
         presets: SerializedPreset[]
         projectRoot: string
+        folders?: SerializedProjectFolders
       }
     ) => {
       const sheet = TrimSheet.deserialize(payload.sheet)
@@ -139,7 +159,12 @@ export function registerIpc(bus: EventBus, binDir: string): void {
         })
       )
       const presets = payload.presets.map((raw) => Preset.deserialize(raw))
-      return exporter.export(sheet, assets, presets, ProjectFs.outputPath(payload.projectRoot))
+      return exporter.export(
+        sheet,
+        assets,
+        presets,
+        ProjectFs.outputPath(payload.projectRoot, payload.folders)
+      )
     }
   )
 
@@ -158,6 +183,7 @@ export function registerIpc(bus: EventBus, binDir: string): void {
         assets: SerializedAsset[]
         presets: SerializedPreset[]
         projectRoot: string
+        folders?: SerializedProjectFolders
       }
     ) => {
       autoExporter.sync({
@@ -165,7 +191,7 @@ export function registerIpc(bus: EventBus, binDir: string): void {
         dirtyIds: payload.dirtyIds,
         assets: payload.assets,
         presets: payload.presets,
-        outputDir: ProjectFs.outputPath(payload.projectRoot)
+        outputDir: ProjectFs.outputPath(payload.projectRoot, payload.folders)
       })
     }
   )

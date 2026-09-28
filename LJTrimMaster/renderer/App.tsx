@@ -41,7 +41,7 @@ export function App(): JSX.Element {
       openFrom(result)
       setError(null)
       try {
-        const refreshed = await refreshService.refreshAll(result.rootPath)
+        const refreshed = await refreshService.refreshAll(result.rootPath, result.data.folders)
         setAssets(refreshed.assets, refreshed.mapConfig)
         setPresets(refreshed.presets, refreshed.warnings)
         setBlenderLinks(refreshed.blenderLinks)

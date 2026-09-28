@@ -20,6 +20,10 @@ export const projectService = {
   save: (rootPath: string, data: SerializedProjectData): Promise<void> =>
     invoke<void>(IpcChannels.PROJECT_SAVE, rootPath, data),
 
+  /** Folder picker for Settings. Resolves to the value to store, or null on cancel. */
+  pickFolder: (rootPath: string, title: string, current?: string): Promise<string | null> =>
+    invoke<string | null>(IpcChannels.PROJECT_PICK_FOLDER, rootPath, title, current),
+
   recents: (): Promise<string[]> => invoke<string[]>(IpcChannels.RECENT_LIST),
 
   forgetRecent: (path: string): Promise<void> => invoke<void>(IpcChannels.RECENT_REMOVE, path)

@@ -16,3 +16,14 @@ blender_version_min = "4.2.0"
 license = [
   "SPDX:GPL-3.0-or-later",
 ]
+
+[build]
+# The folder lives inside a Unity project, so Unity drops a .meta next to every
+# file; none of that, nor the stray build leftovers, belongs in the extension.
+paths_exclude_pattern = [
+  "__pycache__/",
+  "/.git/",
+  "*.meta",
+  "*.zip",
+  "*.bat",
+]

@@ -1,5 +1,10 @@
 import { IpcChannels } from '@shared/ipcChannels'
-import type { SerializedAsset, SerializedPreset, SerializedSheet } from '@shared/types'
+import type {
+  SerializedAsset,
+  SerializedPreset,
+  SerializedProjectFolders,
+  SerializedSheet
+} from '@shared/types'
 import { invoke } from './bridge'
 
 /**
@@ -17,5 +22,6 @@ export const autoExportService = {
     assets: SerializedAsset[]
     presets: SerializedPreset[]
     projectRoot: string
+    folders: SerializedProjectFolders
   }): Promise<void> => invoke<void>(IpcChannels.AUTOEXPORT_SYNC_SHEETS, payload)
 }

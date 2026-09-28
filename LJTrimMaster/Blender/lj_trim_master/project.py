@@ -183,11 +183,16 @@ class ProjectSnapshot:
     """One successful parse of ``projectData.json``."""
 
     __slots__ = ("root", "version", "default_resolution", "sheets", "maps",
-                 "has_cached_vocabulary", "_trims", "stamp")
+                 "has_cached_vocabulary", "_trims", "stamp", "image_dump", "output")
 
     def __init__(self, root, version, default_resolution, sheets, maps,
-                 has_cached_vocabulary, stamp):
+                 has_cached_vocabulary, stamp, folders=None):
         self.root = root
+        folders = folders or {}
+        #: Absolute. Settings in the tool can move either folder; see
+        #: :func:`resolve_folder`.
+        self.image_dump = resolve_folder(root, folders.get("imageDump"), IMAGE_DUMP)
+        self.output = resolve_folder(root, folders.get("output"), OUTPUT)
         self.version = version
         self.default_resolution = default_resolution
         self.sheets = sheets
@@ -215,14 +220,6 @@ class ProjectSnapshot:
     @property
     def trim_count(self):
         return len(self._trims)
-
-    @property
-    def image_dump(self):
-        return os.path.join(self.root, IMAGE_DUMP)
-
-    @property
-    def output(self):
-        return os.path.join(self.root, OUTPUT)
 
     @classmethod
     def parse(cls, root, raw, stamp):
@@ -264,7 +261,19 @@ class ProjectSnapshot:
             maps=MapVocabulary.parse(raw.get("maps")),
             has_cached_vocabulary=isinstance(raw.get("maps"), dict),
             stamp=stamp,
+            folders=raw.get("folders") if isinstance(raw.get("folders"), dict) else None,
         )
+
+
+def resolve_folder(root, configured, fallback):
+    """A configured folder, absolute or root-relative, else the stock one.
+
+    Mirrors ``ProjectFs.resolveFolder`` on the tool side.
+    """
+    value = configured.strip() if isinstance(configured, str) else ""
+    if not value:
+        return os.path.join(root or "", fallback)
+    return os.path.normpath(os.path.join(root or "", value))
 
 
 class ProjectCache:
@@ -374,8 +383,10 @@ def collect_files(folder, depth=0):
     return found
 
 
-def scan_assets(root, vocabulary):
+def scan_assets(dump, vocabulary):
     """Group ``image_dump/`` into assets exactly as the tool's scanner does.
+
+    *dump* is the resolved image_dump folder - ``ProjectSnapshot.image_dump``.
 
     Returns ``[(base_name, {map_name: absolute_path}), ...]`` sorted by name.
 
@@ -385,7 +396,7 @@ def scan_assets(root, vocabulary):
     bare name. On a base+map collision the **first** file wins, matching the
     tool - the loser is simply not returned.
     """
-    dump = os.path.join(root or "", IMAGE_DUMP)
+    dump = dump or ""
     grouped = {}
     order = []
 
@@ -439,14 +450,19 @@ def output_base_name(sheet_name):
     return safe.rstrip(". ").strip() or "Sheet"
 
 
-def scan_sheet_outputs(root, sheets, vocabulary):
+def scan_sheet_outputs(folder, sheets, vocabulary):
     """What the tool has actually exported, per sheet.
+
+    *folder* is the resolved output folder - ``ProjectSnapshot.output``.
 
     Returns ``[(sheet, {map_name: absolute_path}), ...]`` in project order, with
     an empty dict for a sheet nothing has been exported for yet.
 
-    ``output/`` is flat and its files are named ``<SheetName><suffix>.<ext>``,
-    so a file is matched to a sheet by prefix and the rest of the stem is the
+    The tool writes each sheet into ``output/<SheetName>/`` and names the files
+    ``<SheetName><suffix>.<ext>``; that folder is checked first. Exports made
+    before per-sheet folders existed sit flat in ``output/`` and are still
+    picked up for any map the sheet's own folder does not have. Either way a
+    file is matched to a sheet by prefix and the rest of the stem is the
     suffix. A suffix outside the map vocabulary is **kept under its own name**
     rather than dropped: ``_MaskMap`` is a real output of the Unity HDRP preset
     and belongs in the map count even though nothing wires it into a material.
@@ -463,12 +479,7 @@ def scan_sheet_outputs(root, sheets, vocabulary):
     as ``Trim`` + ``_B_BaseColor``, and the longer sheet is the one that wrote
     it.
     """
-    folder = os.path.join(root or "", OUTPUT)
-    try:
-        names = sorted(os.listdir(folder))
-    except OSError:
-        names = []
-
+    folder = folder or ""
     delimiters = tuple(vocabulary.suffix_delims) or ("_",)
     bases = sorted(
         ((output_base_name(sheet.name), sheet) for sheet in sheets),
@@ -477,23 +488,33 @@ def scan_sheet_outputs(root, sheets, vocabulary):
     )
     found = {sheet.id: {} for sheet in sheets}
 
-    for name in names:
-        stem, extension = os.path.splitext(name)
-        if extension.lower() not in IMAGE_EXTENSIONS:
-            continue
-        for base, sheet in bases:
-            if not stem.startswith(base):
+    def match(directory, candidates):
+        try:
+            names = sorted(os.listdir(directory))
+        except OSError:
+            return
+        for name in names:
+            stem, extension = os.path.splitext(name)
+            if extension.lower() not in IMAGE_EXTENSIONS:
                 continue
-            suffix = stem[len(base):]
-            if suffix and not suffix.startswith(delimiters):
-                continue
-            suffix = suffix.lstrip("".join(delimiters))
-            # An empty suffix means a preset that writes one unsuffixed file;
-            # it can only be the primary map.
-            map_name = vocabulary.canonical(suffix) or suffix if suffix \
-                else vocabulary.known_maps[0]
-            found[sheet.id].setdefault(map_name, os.path.join(folder, name))
-            break
+            for base, sheet in candidates:
+                if not stem.startswith(base):
+                    continue
+                suffix = stem[len(base):]
+                if suffix and not suffix.startswith(delimiters):
+                    continue
+                suffix = suffix.lstrip("".join(delimiters))
+                # An empty suffix means a preset that writes one unsuffixed
+                # file; it can only be the primary map.
+                map_name = vocabulary.canonical(suffix) or suffix if suffix \
+                    else vocabulary.known_maps[0]
+                found[sheet.id].setdefault(map_name, os.path.join(directory, name))
+                break
+
+    # The sheet's own folder first, so a fresh export beats a stale flat file.
+    for base, sheet in bases:
+        match(os.path.join(folder, base), [(base, sheet)])
+    match(folder, bases)
 
     return [(sheet, found[sheet.id]) for sheet in sheets]
 
@@ -516,11 +537,11 @@ class OutputCache:
             self._key = None
             self._outputs = []
             return []
-        key = (snapshot.root, snapshot.stamp,
+        key = (snapshot.output, snapshot.stamp,
                tuple(sheet.id for sheet in snapshot.sheets),
                tuple(sheet.name for sheet in snapshot.sheets))
         if force or key != self._key:
-            self._outputs = scan_sheet_outputs(snapshot.root, snapshot.sheets, snapshot.maps)
+            self._outputs = scan_sheet_outputs(snapshot.output, snapshot.sheets, snapshot.maps)
             self._key = key
         return self._outputs
 
@@ -546,9 +567,9 @@ class AssetCache:
             self._key = None
             self._assets = []
             return []
-        key = (snapshot.root, snapshot.maps.suffix_delims, snapshot.maps.known_maps)
+        key = (snapshot.image_dump, snapshot.maps.suffix_delims, snapshot.maps.known_maps)
         if force or key != self._key:
-            self._assets = scan_assets(snapshot.root, snapshot.maps)
+            self._assets = scan_assets(snapshot.image_dump, snapshot.maps)
             self._key = key
         return self._assets
 

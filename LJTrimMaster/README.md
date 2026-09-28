@@ -213,9 +213,15 @@ Verified Fact 12 in §11.
   projectData.json
   image_dump/         SOURCE OF TRUTH. Models are unwrapped against these images.
   placeholder slots/  reserved, currently unused
-  output/             everything the exporter writes
+  output/             everything the exporter writes, one subfolder per trim sheet
+    <SheetName>/        <SheetName>_BaseColor.png, <SheetName>_Normal.png, ...
   blender_links/      written by the Blender addon, read by the tool (§9)
 ```
+
+`image_dump/` and `output/` can be moved in **Settings → Folders**. The choice is
+stored in `projectData.json` under `folders` (`imageDump`, `output`), relative to
+the project root when inside it, absolute otherwise. The Blender addon reads the
+same keys, so both sides always look in the same place.
 
 ---
 

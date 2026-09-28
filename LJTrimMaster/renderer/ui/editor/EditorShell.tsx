@@ -43,7 +43,8 @@ export function EditorShell({ startupError }: EditorShellProps): JSX.Element {
         dirtyIds: project.dirtySheets.map((sheet) => sheet.id),
         assets: assets.map((asset) => asset.serialize()),
         presets: presets.map((preset) => preset.serialize()),
-        projectRoot: project.rootPath
+        projectRoot: project.rootPath,
+        folders: project.data.folders
       })
       .catch(() => {
         /* mirror sync is best-effort; the next edit re-sends it */
