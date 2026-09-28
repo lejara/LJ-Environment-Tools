@@ -24,6 +24,8 @@ if "bpy" in locals():
         importlib.reload(image_packer_core)
     if "image_packer" in locals():
         importlib.reload(image_packer)
+    if "unity_bridge" in locals():
+        importlib.reload(unity_bridge)
 
 import bpy
 from . import preferences
@@ -33,6 +35,7 @@ from . import panel
 from . import materials_import
 from . import image_packer_core
 from . import image_packer
+from . import unity_bridge
 
 
 classes = (
@@ -72,15 +75,23 @@ def register():
 
     # During install/enable Blender runs register() in a restricted context where
     # bpy.data.scenes is not yet accessible. Defer the seed to the next tick.
+    unity_bridge.register()
+
     def _deferred_seed():
         preferences.seed_existing_scenes()
         materials_import.seed_existing_scenes()
         image_packer.seed_existing_scenes()
+        if preferences.get_global_prefs(bpy.context).server_enabled:
+            try:
+                unity_bridge.start()
+            except OSError as e:
+                print(f"[LJ Bridge] Could not start server: {e}")
         return None
     bpy.app.timers.register(_deferred_seed, first_interval=0.0)
 
 
 def unregister():
+    unity_bridge.unregister()
     if preferences._on_load_post in bpy.app.handlers.load_post:
         bpy.app.handlers.load_post.remove(preferences._on_load_post)
     if materials_import._on_load_post in bpy.app.handlers.load_post:

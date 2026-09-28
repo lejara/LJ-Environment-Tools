@@ -17,6 +17,10 @@ class LJEXPORT_PT_panel(bpy.types.Panel):
 
         layout.separator()
 
+        preferences.draw_server(layout, context)
+
+        layout.separator()
+
         prefs = preferences.get_prefs(context)
         preferences.draw_shared(layout, prefs)
 

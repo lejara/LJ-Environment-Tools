@@ -75,6 +75,22 @@ def _shared_annotations():
     }
 
 
+def _on_server_toggled(self, _context):
+    from . import unity_bridge
+    unity_bridge.apply_enabled(self.server_enabled)
+
+
+def draw_server(layout, context):
+    from . import unity_bridge
+    global_prefs = get_global_prefs(context)
+    row = layout.row()
+    row.prop(global_prefs, "server_enabled")
+    if unity_bridge.is_running():
+        row.label(text=f"Listening on port {unity_bridge.port()}", icon='LINKED')
+    else:
+        row.label(text="Off", icon='UNLINKED')
+
+
 def get_global_prefs(context):
     return context.preferences.addons[__package__].preferences
 
@@ -143,11 +159,21 @@ def draw_shared(layout, target):
 
 class LJEXPORT_AP_preferences(bpy.types.AddonPreferences):
     bl_idname = __package__
-    __annotations__ = _shared_annotations()
+    __annotations__ = {
+        **_shared_annotations(),
+        # Per-Blender-process, so global only (not mirrored into the scene).
+        "server_enabled": bpy.props.BoolProperty(
+            name="Server",
+            description="Listen on localhost so Unity can send FBX files into this running Blender",
+            default=True,
+            update=_on_server_toggled,
+        ),
+    }
 
     def draw(self, context):
         layout = self.layout
         layout.label(text="Defaults for new blend files. Per-file values live in View3D > N > LJ.")
+        draw_server(layout, context)
         draw_shared(layout, self)
         for fn in addon_prefs_draw_extras.values():
             fn(layout, self)

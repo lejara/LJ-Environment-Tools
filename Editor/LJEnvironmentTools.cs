@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
@@ -11,6 +13,8 @@ namespace LJ.EditorTools
 
         private Vector2 _scroll;
         private bool _exporterExpanded = true;
+        private List<LJBlenderBridge.Instance> _blenderInstances = new List<LJBlenderBridge.Instance>();
+        private int _blenderInstanceIndex;
 
         [MenuItem("Tools/LJ/Environment Tools")]
         public static void ShowWindow()
@@ -21,6 +25,52 @@ namespace LJ.EditorTools
         private void OnEnable()
         {
             _exporterExpanded = EditorPrefs.GetBool(ExporterExpandedPrefKey, true);
+            RefreshBlenderInstances();
+        }
+
+        private void OnFocus()
+        {
+            RefreshBlenderInstances();
+        }
+
+        private void RefreshBlenderInstances()
+        {
+            int previousPid = _blenderInstanceIndex < _blenderInstances.Count ? _blenderInstances[_blenderInstanceIndex].pid : -1;
+            _blenderInstances = LJBlenderBridge.FindInstances();
+            int kept = _blenderInstances.FindIndex(i => i.pid == previousPid);
+            _blenderInstanceIndex = kept >= 0 ? kept : 0;
+        }
+
+        private void DrawRunningBlenderGUI(int selectedCount)
+        {
+            GUILayout.Space(8);
+            EditorGUILayout.LabelField("Running Blender", EditorStyles.boldLabel);
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                if (_blenderInstances.Count == 0)
+                {
+                    EditorGUILayout.HelpBox("No Blender instances found.", MessageType.Info);
+                }
+                else
+                {
+                    string[] labels = _blenderInstances.Select(i => i.Label).ToArray();
+                    _blenderInstanceIndex = EditorGUILayout.Popup(_blenderInstanceIndex, labels);
+                }
+
+                if (GUILayout.Button("Refresh", GUILayout.Width(64)))
+                {
+                    RefreshBlenderInstances();
+                }
+            }
+
+            using (new EditorGUI.DisabledScope(selectedCount == 0 || _blenderInstances.Count == 0))
+            {
+                if (GUILayout.Button("Export to Running Blender 🔗", GUILayout.Height(28)))
+                {
+                    LJBlenderBridge.ExportTo(_blenderInstances[_blenderInstanceIndex]);
+                }
+            }
         }
 
         private void OnSelectionChange()
@@ -66,6 +116,8 @@ namespace LJ.EditorTools
                         LJBlenderLauncher.ExportAndOpen();
                     }
                 }
+
+                DrawRunningBlenderGUI(count);
 
                 GUILayout.Space(FoldoutPadding);
             }
